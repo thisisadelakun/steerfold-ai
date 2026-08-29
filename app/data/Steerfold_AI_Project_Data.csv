@@ -1,0 +1,12 @@
+﻿Project_ID,Project_Name,Project_Manager,Project_Type,Strategic_Priority,Budget_BAC,Planned_Value_PV,Earned_Value_EV,Actual_Cost_AC,Percent_Complete,Risk_Score,Start_Date,End_Date,Resource_Demand,Project_Status
+P001,CRM Modernization,Maya Chen,Business Transformation,High,"$180,000.00","$120,000.00","$112,000.00","$118,000.00",62%,8,3/2/2026,9/30/2026,Medium,At Risk
+P002,Client Portal Revamp,Daniel Brooks,Customer Experience,High,"$140,000.00","$95,000.00","$98,000.00","$92,000.00",70%,6,3/16/2026,8/28/2026,Medium,On Track
+P003,Cloud Migration,Priya Shah,Infrastructure,High,"$260,000.00","$160,000.00","$143,000.00","$172,000.00",55%,16,2/9/2026,10/30/2026,High,At Risk
+P004,Data Warehouse Upgrade,Liam Carter,Data & Analytics,Medium,"$210,000.00","$130,000.00","$126,000.00","$128,000.00",60%,9,4/6/2026,10/16/2026,Medium,On Track
+P005,Mobile Service App,Sofia Martinez,Digital Product,High,"$165,000.00","$90,000.00","$78,000.00","$88,000.00",47%,15,4/20/2026,11/13/2026,High,At Risk
+P006,Cybersecurity Enhancement,Ethan Wilson,Cybersecurity,High,"$190,000.00","$110,000.00","$116,000.00","$109,000.00",61%,7,3/23/2026,9/18/2026,High,On Track
+P007,ERP Integration,Olivia Grant,Enterprise Systems,High,"$300,000.00","$175,000.00","$150,000.00","$190,000.00",50%,20,2/2/2026,11/27/2026,High,Critical
+P008,AI Service Desk Pilot,Noah Bennett,AI Pilot,Medium,"$120,000.00","$65,000.00","$68,000.00","$62,000.00",57%,8,5/4/2026,9/25/2026,Medium,On Track
+P009,Network Refresh,Ava Thompson,Infrastructure,Medium,"$150,000.00","$100,000.00","$96,000.00","$98,000.00",64%,10,3/9/2026,8/31/2026,Medium,On Track
+P010,Compliance Reporting Automation,Lucas Morgan,Compliance,Medium,"$135,000.00","$75,000.00","$70,000.00","$77,000.00",52%,12,5/11/2026,10/23/2026,Medium,At Risk
+,,,,,,,,,,,,,,

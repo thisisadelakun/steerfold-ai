@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Steerfold AI | Portfolio Overview</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <div class="sf-sidebar-overlay" data-sidebar-overlay hidden></div>
+
+    <div class="sf-app-shell">
+      <aside class="sf-sidebar" id="sf-sidebar" aria-label="Primary navigation">
+        <div class="sf-sidebar-header">
+          <a class="sf-wordmark" href="./" aria-label="Steerfold AI home">
+            <span class="sf-wordmark-mark" aria-hidden="true">S</span>
+            <span class="sf-wordmark-text">Steerfold AI</span>
+          </a>
+
+          <button class="sf-sidebar-close" type="button" aria-label="Close navigation menu" aria-controls="sf-sidebar" data-sidebar-close>
+            <svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M6 6l12 12M18 6L6 18"></path>
+            </svg>
+          </button>
+        </div>
+
+        <button class="sf-sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-controls="sf-sidebar" aria-expanded="true" data-sidebar-toggle>
+          <svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+            <path d="M15 18l-6-6 6-6"></path>
+          </svg>
+          <span class="sf-sidebar-toggle-text">Collapse</span>
+        </button>
+
+        <nav class="sf-nav" aria-label="Portfolio sections">
+          <a class="sf-nav-link sf-nav-link--active" href="./" aria-current="page" data-nav-target="portfolio">Portfolio</a>
+          <a class="sf-nav-link" href="./#projects" data-nav-target="projects">Projects</a>
+          <a class="sf-nav-link" href="./#budget" data-nav-target="future">Budget &amp; EVM</a>
+          <a class="sf-nav-link" href="./#forecasting" data-nav-target="future">Forecasting</a>
+          <a class="sf-nav-link" href="./#decision-support" data-nav-target="future">Decision Support</a>
+        </nav>
+      </aside>
+
+      <div class="sf-main-area">
+        <header class="sf-page-header">
+          <button class="sf-mobile-menu-button" type="button" aria-label="Open navigation menu" aria-controls="sf-sidebar" aria-expanded="false" data-mobile-menu-button>
+            <svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M4 7h16M4 12h16M4 17h16"></path>
+            </svg>
+          </button>
+
+          <div class="sf-page-heading">
+            <p class="sf-eyebrow">AI-Enabled Project Portfolio Intelligence</p>
+            <h1 data-page-title>Portfolio Overview</h1>
+            <p data-page-subtitle>Monitor performance, budget, risk and portfolio health.</p>
+          </div>
+
+          <div class="sf-account-area" aria-label="User controls">
+            <div
+              class="sf-currency-indicator"
+              data-currency-indicator
+              aria-label="Display currency: CAD"
+            >
+              <span class="sf-currency-label">Currency ·</span>
+              CAD
+            </div>
+
+            <button class="sf-icon-button" type="button" aria-label="Account controls">
+              <svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <path d="M20 21a8 8 0 0 0-16 0"></path>
+                <circle cx="12" cy="8" r="4"></circle>
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <main class="sf-main-content">
+          <section class="sf-kpi-grid" aria-label="Portfolio key performance indicators" data-portfolio-overview data-portfolio-kpis>
+            <article class="sf-kpi-card">
+              <span class="sf-kpi-label">Total Projects</span>
+              <strong class="sf-kpi-value" data-kpi="totalProjects">&mdash;</strong>
+            </article>
+            <article class="sf-kpi-card">
+              <span class="sf-kpi-label">On Track</span>
+              <strong class="sf-kpi-value sf-kpi-value--success" data-kpi="onTrack">&mdash;</strong>
+            </article>
+            <article class="sf-kpi-card">
+              <span class="sf-kpi-label">At Risk</span>
+              <strong class="sf-kpi-value sf-kpi-value--warning" data-kpi="atRisk">&mdash;</strong>
+            </article>
+            <article class="sf-kpi-card">
+              <span class="sf-kpi-label">Critical</span>
+              <strong class="sf-kpi-value sf-kpi-value--danger" data-kpi="critical">&mdash;</strong>
+            </article>
+          </section>
+
+          <section data-forecasting-view hidden>
+            <section class="sf-kpi-grid" aria-label="Forecasting key performance indicators" data-forecasting-kpis>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">Estimate at Completion (EAC)</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">Estimate to Complete (ETC)</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">Variance at Completion (VAC)</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">To-Complete Performance Index (TCPI)</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+            </section>
+
+            <section class="sf-panel sf-analytics-panel" aria-labelledby="portfolio-forecast-title">
+              <div class="sf-section-header">
+                <div>
+                  <h2 id="portfolio-forecast-title">Portfolio Cost Forecast</h2>
+                  <p>Compare approved budget with projected final portfolio cost.</p>
+                </div>
+              </div>
+
+              <div class="sf-chart-container" data-portfolio-forecast aria-live="polite"></div>
+            </section>
+
+            <section class="sf-panel sf-analytics-panel" aria-labelledby="project-forecast-title">
+              <div class="sf-section-header">
+                <div>
+                  <h2 id="project-forecast-title">Project Forecast Analysis</h2>
+                  <p>Review projected final cost and budget exposure by project.</p>
+                </div>
+              </div>
+
+              <div class="sf-chart-container" data-project-forecast-analysis aria-live="polite"></div>
+            </section>
+          </section>
+
+          <section data-decision-support-view hidden>
+            <section class="sf-kpi-grid" aria-label="Decision support key performance indicators" data-decision-support-kpis>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">Projects Requiring Attention</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">Critical Priority</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">Forecast Budget Exposure</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">Recommended Actions</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+            </section>
+
+            <section class="sf-panel sf-analytics-panel" aria-labelledby="priority-recommendations-title">
+              <div class="sf-section-header">
+                <div>
+                  <h2 id="priority-recommendations-title">Priority Recommendations</h2>
+                  <p>Surface projects requiring management attention based on performance, risk and forecast exposure.</p>
+                </div>
+              </div>
+
+              <div class="sf-chart-container" data-priority-recommendations aria-live="polite"></div>
+            </section>
+
+            <section class="sf-panel sf-analytics-panel" aria-labelledby="decision-factors-title">
+              <div class="sf-section-header">
+                <div>
+                  <h2 id="decision-factors-title">Decision Factors</h2>
+                  <p>Review the portfolio signals contributing to each recommendation.</p>
+                </div>
+              </div>
+
+              <div class="sf-chart-container" data-decision-factors aria-live="polite"></div>
+            </section>
+          </section>
+
+          <section class="sf-panel sf-portfolio-panel" id="projects" tabindex="-1" aria-labelledby="portfolio-title" data-projects-view>
+            <div class="sf-section-header">
+              <div>
+                <h2 id="portfolio-title">Project Portfolio</h2>
+              </div>
+
+              <form class="sf-table-controls" action="#" role="search">
+                <label class="sf-visually-hidden" for="project-search">Search projects</label>
+                <input id="project-search" class="sf-search-input" type="search" name="project-search" placeholder="Search projects" data-project-search>
+
+                <label class="sf-visually-hidden" for="status-filter">Filter by status</label>
+                <select id="status-filter" class="sf-filter-select" name="status-filter" aria-label="Status filter" data-status-filter>
+                  <option value="">All Statuses</option>
+                  <option value="On Track">On Track</option>
+                  <option value="At Risk">At Risk</option>
+                  <option value="Critical">Critical</option>
+                </select>
+              </form>
+            </div>
+
+            <div class="sf-table-wrap">
+              <table class="sf-project-table">
+                <caption class="sf-visually-hidden">Project portfolio table shell</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">Project</th>
+                    <th scope="col">Manager</th>
+                    <th scope="col">Priority</th>
+                    <th scope="col">Complete</th>
+                    <th scope="col">Budget</th>
+                    <th scope="col">Risk</th>
+                    <th scope="col">Resource Demand</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody data-project-table-body>
+                  <tr class="sf-empty-row">
+                    <td colspan="8">Loading portfolio data...</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section
+  class="sf-panel sf-analytics-panel"
+  aria-labelledby="financial-performance-title"
+  data-portfolio-overview
+  data-financial-performance
+>
+  <div class="sf-section-header">
+    <div>
+      <h2 id="financial-performance-title">
+        Portfolio Financial Performance
+      </h2>
+      <p>
+        Compare planned value, earned value and actual cost across the portfolio.
+      </p>
+    </div>
+  </div>
+
+  <div
+    class="sf-chart-container"
+    data-financial-chart
+    aria-live="polite"
+  >
+    <p class="sf-chart-loading">
+      Loading financial performance...
+    </p>
+  </div>
+</section>
+
+<section
+  class="sf-panel sf-analytics-panel"
+  aria-labelledby="risk-completion-title"
+  data-portfolio-overview
+  data-risk-completion
+>
+  <div class="sf-section-header">
+    <div>
+      <h2 id="risk-completion-title">
+        Risk vs Project Completion
+      </h2>
+      <p>
+        Identify projects that combine elevated risk with lower completion.
+      </p>
+    </div>
+  </div>
+
+  <div
+    class="sf-chart-container"
+    data-risk-completion-chart
+    aria-live="polite"
+  >
+    <p class="sf-chart-loading">
+      Loading risk analysis...
+    </p>
+  </div>
+</section>
+
+<section
+  class="sf-panel sf-analytics-panel"
+  aria-labelledby="resource-demand-title"
+  data-portfolio-overview
+  data-resource-demand
+>
+  <div class="sf-section-header">
+    <div>
+      <h2 id="resource-demand-title">
+        Resource Demand by Project Status
+      </h2>
+      <p>
+        Compare resource pressure across On Track, At Risk and Critical projects.
+      </p>
+    </div>
+  </div>
+
+  <div
+    class="sf-chart-container"
+    data-resource-demand-chart
+    aria-live="polite"
+  >
+    <p class="sf-chart-loading">
+      Loading resource demand analysis...
+    </p>
+  </div>
+</section>
+
+          <section class="sf-panel sf-insights-panel" aria-labelledby="insights-title" data-portfolio-overview data-portfolio-insights>
+            <div class="sf-section-header">
+              <div>
+                <h2 id="insights-title">Portfolio Insights</h2>
+                <div
+  class="sf-insights-content"
+  data-portfolio-insights-content
+  aria-live="polite"
+>
+  <p>
+    Loading portfolio insights...
+  </p>
+</div>
+              </div>
+            </div>
+          </section>
+
+          <section class="sf-project-detail" aria-live="polite" data-project-detail hidden></section>
+
+          <section data-budget-view hidden>
+            <section class="sf-kpi-grid" aria-label="Budget key performance indicators" data-budget-kpis>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">&nbsp;</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">&nbsp;</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">&nbsp;</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+              <article class="sf-kpi-card">
+                <span class="sf-kpi-label">&nbsp;</span>
+                <strong class="sf-kpi-value">&mdash;</strong>
+              </article>
+            </section>
+
+            <section class="sf-panel sf-analytics-panel" aria-labelledby="evm-performance-title">
+              <div class="sf-section-header">
+                <div>
+                  <h2 id="evm-performance-title">Portfolio EVM Performance</h2>
+                  <p>Monitor cost and schedule efficiency across the project portfolio.</p>
+                </div>
+              </div>
+
+              <div class="sf-chart-container" data-evm-performance aria-live="polite"></div>
+            </section>
+
+            <section class="sf-panel sf-analytics-panel" aria-labelledby="variance-analysis-title">
+              <div class="sf-section-header">
+                <div>
+                  <h2 id="variance-analysis-title">Project Variance Analysis</h2>
+                  <p>Compare cost and schedule variance by project.</p>
+                </div>
+              </div>
+
+              <div class="sf-chart-container" data-variance-analysis aria-live="polite"></div>
+            </section>
+          </section>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+  </body>
+</html>
