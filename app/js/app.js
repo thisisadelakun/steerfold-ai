@@ -1873,7 +1873,10 @@ showStakeholderView() {
 
   if (this.stakeholderView) {
     this.stakeholderView.hidden = false;
-    renderStakeholderView(this.stakeholderView);
+    renderStakeholderView(
+      this.stakeholderView,
+      this.state.projects,
+    );
   }
 
   this.setNavigationArea("Stakeholder View");
