@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title>Steerfold AI</title>
+  <rect width="64" height="64" rx="12" fill="#0C0D0F"/>
+  <path
+    d="M42 18H26c-5.5 0-9 3.1-9 7.7 0 4.1 2.7 6.3 8.2 7.5l10.1 2.2c3 .7 4.4 1.8 4.4 3.8 0 2.5-2 4-5.4 4H18v5h16.6c6.5 0 10.4-3.4 10.4-8.7 0-4.4-2.8-6.9-8.8-8.2l-10.1-2.2c-2.8-.6-3.9-1.6-3.9-3.4 0-2.1 1.8-3.4 4.7-3.4H42v-5.3Z"
+    fill="#F4F1E8"
+  />
+  <path
+    d="M20 52h24"
+    fill="none"
+    stroke="#7C9BFF"
+    stroke-linecap="round"
+    stroke-width="4"
+  />
+</svg>
