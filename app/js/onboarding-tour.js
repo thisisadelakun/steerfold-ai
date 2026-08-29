@@ -14,26 +14,26 @@ const TOUR_STEPS = [
   {
     title: "Welcome to Steerfold AI",
     copy:
-      "Explore project performance, budget, risk, forecasting and management decision signals in one interactive portfolio.",
+      "Explore project performance, budgets, risk, forecasting and management decision signals in one interactive portfolio.",
   },
   {
     title: "Portfolio Overview",
     copy:
-      "Start here for a high-level view of portfolio health, financial performance, risk and resource demand.",
+      "Start with a high-level view of portfolio health, financial performance, risk and resource demand.",
     selector: '.sf-nav-link[data-nav-target="portfolio"]',
     fallbackSelector: ".sf-sidebar",
   },
   {
     title: "Explore Projects",
     copy:
-      "Search, filter, sort and review individual projects, then open any project for detailed performance information.",
+      "Search, filter and review individual projects, then open any project for detailed performance information.",
     selector: '.sf-nav-link[href="./#projects"]',
     fallbackSelector: ".sf-sidebar",
   },
   {
     title: "Performance & Forecasting",
     copy:
-      "Review earned value performance, schedule and cost variance, projected final cost and remaining budget pressure.",
+      "Review earned value performance, cost and schedule efficiency, projected final cost and remaining budget pressure.",
     selectors: [
       '.sf-nav-link[href="./#budget"]',
       '.sf-nav-link[href="./#forecasting"]',
@@ -41,16 +41,23 @@ const TOUR_STEPS = [
     fallbackSelector: ".sf-nav, .sf-sidebar",
   },
   {
+    title: "Choose Your Analysis",
+    copy:
+      "Switch between risk, budget, completion, donut, heatmap and project health radar views to explore the portfolio from different angles.",
+    selector: "[data-portfolio-analysis-select]",
+    fallbackSelector: "[data-portfolio-analysis]",
+  },
+  {
     title: "Decision Support",
     copy:
-      "See which projects require management attention and the factors driving each recommendation.",
+      "See which projects require management attention and the performance, risk and forecast signals driving each recommendation.",
     selector: '.sf-nav-link[href="./#decision-support"]',
     fallbackSelector: ".sf-sidebar",
   },
   {
     title: "Explore Freely",
     copy:
-      "Portfolio data is simulated for demonstration. Public visitors can explore the dashboard, while authenticated admins can manage project records.",
+      "Portfolio data is simulated for demonstration. Public visitors can explore the dashboard, while authenticated admins can create, edit and delete project records.",
     selector: '.sf-icon-button[aria-label="Account controls"]',
     fallbackSelector: ".sf-account-area",
   },
