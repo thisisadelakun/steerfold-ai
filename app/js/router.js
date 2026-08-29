@@ -41,6 +41,13 @@ export function getCurrentRoute() {
     };
   }
 
+  if (url.hash === "#stakeholder-view") {
+    return {
+      view: "stakeholder-view",
+      projectId: null,
+    };
+  }
+
   return {
     view: "portfolio",
     projectId: null,
@@ -140,6 +147,21 @@ export function pushDecisionSupportRoute() {
   history.pushState(
     {
       view: "decision-support",
+    },
+    "",
+    buildRelativeUrl(url),
+  );
+}
+
+export function pushStakeholderViewRoute() {
+  const url = new URL(window.location.href);
+
+  url.searchParams.delete("project");
+  url.hash = "stakeholder-view";
+
+  history.pushState(
+    {
+      view: "stakeholder-view",
     },
     "",
     buildRelativeUrl(url),

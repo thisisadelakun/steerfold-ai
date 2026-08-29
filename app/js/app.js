@@ -54,6 +54,7 @@ import {
   pushBudgetRoute,
   pushForecastingRoute,
   pushDecisionSupportRoute,
+  pushStakeholderViewRoute,
   listenForRouteChanges,
 } from "./router.js";
 
@@ -66,6 +67,8 @@ import {
 import { initAuthUI } from "./auth-ui.js";
 
 import { initOnboardingTour } from "./onboarding-tour.js";
+
+import { renderStakeholderView } from "./stakeholder-view.js";
 
 import { openProjectForm } from "./project-form.js";
 
@@ -262,6 +265,10 @@ const SteerfoldApp = {
     this.pageSubtitle = document.querySelector(
       "[data-page-subtitle]",
     );
+    this.pageEyebrow = document.querySelector(".sf-eyebrow");
+    this.pageSupportingLine = document.querySelector(
+      "[data-page-supporting-line]",
+    );
     this.currencyIndicator = document.querySelector(
       "[data-currency-indicator]",
     );
@@ -300,6 +307,10 @@ const SteerfoldApp = {
 
     this.decisionSupportView = document.querySelector(
       "[data-decision-support-view]",
+    );
+
+    this.stakeholderView = document.querySelector(
+      "[data-stakeholder-view]",
     );
 
     this.decisionSupportKpiContainer = document.querySelector(
@@ -515,6 +526,31 @@ const SteerfoldApp = {
   setDataSourceNoticeVisibility(isVisible) {
     if (this.dataSourceNotice) {
       this.dataSourceNotice.hidden = !isVisible;
+    }
+  },
+
+  setDefaultPageHeaderContext() {
+    if (this.pageEyebrow) {
+      this.pageEyebrow.textContent =
+        "AI-Enabled Project Portfolio Intelligence";
+    }
+
+    if (this.pageSupportingLine) {
+      this.pageSupportingLine.textContent = "";
+      this.pageSupportingLine.hidden = true;
+    }
+  },
+
+  setStakeholderPageHeaderContext() {
+    if (this.pageEyebrow) {
+      this.pageEyebrow.textContent =
+        "PRESENTATION & STAKEHOLDER INTELLIGENCE";
+    }
+
+    if (this.pageSupportingLine) {
+      this.pageSupportingLine.textContent =
+        "Read-only views tailored for executive, sponsor and delivery conversations.";
+      this.pageSupportingLine.hidden = false;
     }
   },
 
@@ -1510,6 +1546,12 @@ renderRouteFromUrl() {
     return;
   }
 
+  if (route.view === "stakeholder-view") {
+    this.showStakeholderView();
+
+    return;
+  }
+
   this.showPortfolioView({
     activeArea: "Portfolio",
   });
@@ -1550,6 +1592,7 @@ showPortfolioView({
   activeArea = "Portfolio",
   focusProjects = false,
 } = {}) {
+    this.setDefaultPageHeaderContext();
 
     this.state.currentProjectId = null;
 
@@ -1588,6 +1631,10 @@ showPortfolioView({
       this.decisionSupportView.hidden = true;
     }
 
+    if (this.stakeholderView) {
+      this.stakeholderView.hidden = true;
+    }
+
     this.projectsViews.forEach((view) => {
       view.hidden = !isProjectsView;
     });
@@ -1604,6 +1651,8 @@ showPortfolioView({
   },
 
   showProjectDetail(projectId) {
+    this.setDefaultPageHeaderContext();
+
     const project =
       this.getProjectById(projectId);
 
@@ -1630,6 +1679,10 @@ showPortfolioView({
 
     if (this.decisionSupportView) {
       this.decisionSupportView.hidden = true;
+    }
+
+    if (this.stakeholderView) {
+      this.stakeholderView.hidden = true;
     }
 
     this.projectDetail.hidden = false;
@@ -1662,6 +1715,8 @@ showPortfolioView({
   },
 
 showBudgetView() {
+  this.setDefaultPageHeaderContext();
+
   this.state.currentProjectId = null;
 
   this.pageTitle.textContent = "Budget & EVM";
@@ -1693,10 +1748,16 @@ showBudgetView() {
     this.decisionSupportView.hidden = true;
   }
 
+  if (this.stakeholderView) {
+    this.stakeholderView.hidden = true;
+  }
+
   this.setNavigationArea("Budget & EVM");
 },
 
 showForecastingView() {
+  this.setDefaultPageHeaderContext();
+
   this.state.currentProjectId = null;
 
   this.pageTitle.textContent = "Forecasting";
@@ -1728,10 +1789,16 @@ showForecastingView() {
     this.forecastingView.hidden = false;
   }
 
+  if (this.stakeholderView) {
+    this.stakeholderView.hidden = true;
+  }
+
   this.setNavigationArea("Forecasting");
 },
 
 showDecisionSupportView() {
+  this.setDefaultPageHeaderContext();
+
   this.state.currentProjectId = null;
 
   this.pageTitle.textContent = "Decision Support";
@@ -1763,7 +1830,53 @@ showDecisionSupportView() {
     this.decisionSupportView.hidden = false;
   }
 
+  if (this.stakeholderView) {
+    this.stakeholderView.hidden = true;
+  }
+
   this.setNavigationArea("Decision Support");
+},
+
+showStakeholderView() {
+  this.state.currentProjectId = null;
+
+  this.setStakeholderPageHeaderContext();
+
+  this.pageTitle.textContent = "Stakeholder View";
+
+  this.pageSubtitle.textContent =
+    "Present the right portfolio signals to the right audience.";
+
+  this.setPortfolioContextVisibility(false);
+
+  this.portfolioOverviewViews.forEach((view) => {
+    view.hidden = true;
+  });
+
+  this.projectsViews.forEach((view) => {
+    view.hidden = true;
+  });
+
+  this.projectDetail.hidden = true;
+
+  if (this.budgetView) {
+    this.budgetView.hidden = true;
+  }
+
+  if (this.forecastingView) {
+    this.forecastingView.hidden = true;
+  }
+
+  if (this.decisionSupportView) {
+    this.decisionSupportView.hidden = true;
+  }
+
+  if (this.stakeholderView) {
+    this.stakeholderView.hidden = false;
+    renderStakeholderView(this.stakeholderView);
+  }
+
+  this.setNavigationArea("Stakeholder View");
 },
 
 renderKpis(projects) {
@@ -2670,7 +2783,14 @@ renderProjectDetail(project) {
       } else if (label === "Decision Support") {
         pushDecisionSupportRoute();
         this.renderRouteFromUrl();
+      } else if (label === "Stakeholder View") {
+        pushStakeholderViewRoute();
+        this.renderRouteFromUrl();
       }
+    } else if (target === "stakeholder") {
+      event.preventDefault();
+      pushStakeholderViewRoute();
+      this.renderRouteFromUrl();
     }
 
     if (this.isSmallScreen()) {
