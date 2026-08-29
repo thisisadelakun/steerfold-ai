@@ -47,7 +47,7 @@ function createField(
 
   input.autocomplete =
     inputType === "email"
-      ? "email"
+      ? "username"
       : "current-password";
 
   wrapper.append(label, input);
@@ -58,17 +58,94 @@ function createField(
   };
 }
 
-function createHeader(titleText) {
+function createAuthMark() {
+  const mark = document.createElement("span");
+
+  mark.className = "sf-auth-mark";
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = "S";
+
+  return mark;
+}
+
+function createHeader(titleText, copyText = "") {
   const header = document.createElement("div");
   header.className = "sf-auth-panel-header";
 
-  const title = document.createElement("span");
+  const title = document.createElement("h2");
   title.className = "sf-auth-panel-title";
   title.textContent = titleText;
 
-  header.append(title);
+  header.append(
+    createAuthMark(),
+    title,
+  );
+
+  if (copyText) {
+    const copy = document.createElement("p");
+
+    copy.className = "sf-auth-panel-copy";
+    copy.textContent = copyText;
+
+    header.append(copy);
+  }
 
   return header;
+}
+
+function createPasswordToggle(input) {
+  const button = document.createElement("button");
+  const icon = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg",
+  );
+  const circle = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "circle",
+  );
+  const path = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "path",
+  );
+
+  button.type = "button";
+  button.className = "sf-auth-password-toggle";
+  button.setAttribute("aria-label", "Show password");
+  button.title = "Show password";
+
+  icon.setAttribute("viewBox", "0 0 24 24");
+  icon.setAttribute("aria-hidden", "true");
+  icon.setAttribute("focusable", "false");
+  icon.classList.add("sf-auth-password-icon");
+
+  path.setAttribute(
+    "d",
+    "M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z",
+  );
+  circle.setAttribute("cx", "12");
+  circle.setAttribute("cy", "12");
+  circle.setAttribute("r", "3");
+
+  icon.append(
+    path,
+    circle,
+  );
+  button.append(icon);
+
+  button.addEventListener("click", () => {
+    const shouldShow =
+      input.type === "password";
+
+    input.type = shouldShow ? "text" : "password";
+    button.setAttribute(
+      "aria-label",
+      shouldShow ? "Hide password" : "Show password",
+    );
+    button.title =
+      shouldShow ? "Hide password" : "Show password";
+  });
+
+  return button;
 }
 
 function createErrorBox(message = "") {
@@ -98,7 +175,8 @@ function renderLoggedOut(
   panel.replaceChildren();
 
   const header = createHeader(
-    "Admin Sign In",
+    "Admin Access",
+    "Sign in to manage portfolio records. Public visitors can continue exploring the dashboard.",
   );
 
   const form = document.createElement("form");
@@ -115,6 +193,21 @@ function renderLoggedOut(
     "password",
     "password",
   );
+  const passwordControl =
+    document.createElement("div");
+
+  passwordControl.className =
+    "sf-auth-password-control";
+
+  passwordField.wrapper.replaceChildren(
+    passwordField.wrapper.querySelector("label"),
+    passwordControl,
+  );
+
+  passwordControl.append(
+    passwordField.input,
+    createPasswordToggle(passwordField.input),
+  );
 
   const errorBox =
     createErrorBox(message);
@@ -127,11 +220,19 @@ function renderLoggedOut(
     "sf-auth-submit";
   submitButton.textContent = "Sign In";
 
+  const supportText =
+    document.createElement("p");
+
+  supportText.className = "sf-auth-support";
+  supportText.textContent =
+    "Authenticated access is required for project changes.";
+
   form.append(
     emailField.wrapper,
     passwordField.wrapper,
     errorBox,
     submitButton,
+    supportText,
   );
 
   panel.append(
@@ -181,7 +282,10 @@ function renderLoggedOut(
 function renderLoggedIn(panel) {
   panel.replaceChildren();
 
-  const header = createHeader("Admin");
+  const header = createHeader(
+    "Admin",
+    "You can create, edit and delete project records.",
+  );
 
   const user = getCurrentUser();
 
@@ -194,7 +298,8 @@ function renderLoggedIn(panel) {
   const label =
     document.createElement("span");
 
-  label.textContent = "Signed in as: ";
+  label.className = "sf-auth-signed-in-label";
+  label.textContent = "Signed in as";
 
   const email =
     document.createElement("span");
@@ -294,7 +399,7 @@ function positionPanel(
     window.innerHeight;
 
   const panelWidth = Math.min(
-    320,
+    360,
     viewportWidth - gutter * 2,
   );
 
