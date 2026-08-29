@@ -387,7 +387,7 @@ function positionPanel(
   panel,
 ) {
   const gutter = 12;
-  const gap = 8;
+  const gap = 10;
 
   const rect =
     button.getBoundingClientRect();
@@ -416,7 +416,15 @@ function positionPanel(
     panel.offsetHeight;
 
   let left =
-    rect.right - panelWidth;
+    rect.right + gap;
+
+  if (
+    left + panelWidth >
+    viewportWidth - gutter
+  ) {
+    left =
+      rect.left - panelWidth - gap;
+  }
 
   left = Math.max(
     gutter,
@@ -428,8 +436,7 @@ function positionPanel(
     ),
   );
 
-  let top =
-    rect.bottom + gap;
+  let top = rect.top;
 
   if (
     top + panelHeight >
@@ -516,10 +523,25 @@ function closePanel(
   }
 }
 
+function updateLauncherState(button) {
+  const isSignedIn = isAuthenticated();
+  const labelText =
+    isSignedIn ? "Admin" : "Admin Access";
+  const label = button.querySelector(
+    ".sf-sidebar-account-label",
+  );
+
+  if (label) {
+    label.textContent = labelText;
+  }
+
+  button.title = labelText;
+}
+
 export function initAuthUI() {
   const button =
     document.querySelector(
-      ".sf-account-area .sf-icon-button",
+      "[data-auth-launcher]",
     );
 
   if (!button) {
@@ -537,6 +559,8 @@ export function initAuthUI() {
     "true";
 
   const panel = createPanel();
+
+  updateLauncherState(button);
 
   button.setAttribute(
     "aria-expanded",
@@ -631,6 +655,8 @@ export function initAuthUI() {
   window.addEventListener(
     "auth:changed",
     (event) => {
+      updateLauncherState(button);
+
       if (panel.hidden) {
         return;
       }

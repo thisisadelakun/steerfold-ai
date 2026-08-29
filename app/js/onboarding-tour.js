@@ -58,8 +58,7 @@ const TOUR_STEPS = [
     title: "Explore Freely",
     copy:
       "Portfolio data is simulated for demonstration. Public visitors can explore the dashboard, while authenticated admins can create, edit and delete project records.",
-    selector: '.sf-icon-button[aria-label="Account controls"]',
-    fallbackSelector: ".sf-account-area",
+    selector: "[data-auth-launcher]",
   },
 ];
 

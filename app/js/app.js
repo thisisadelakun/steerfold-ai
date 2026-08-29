@@ -71,6 +71,8 @@ import { openProjectForm } from "./project-form.js";
 
 import { openConfirmDialog } from "./confirm-dialog.js";
 
+import { printCurrentView } from "./export-service.js";
+
 import { isAuthenticated } from "./auth-service.js";
 
 import { APP_CONFIG } from "./app-config.js";
@@ -244,6 +246,7 @@ const SteerfoldApp = {
     this.setupProjectResultCount();
     this.setupProjectPagination();
     this.setupPortfolioAnalysis();
+    this.setupExportControls();
     this.setupRouting();
     this.setupAuthChanges();
     initAuthUI();
@@ -262,6 +265,10 @@ const SteerfoldApp = {
     this.currencyIndicator = document.querySelector(
       "[data-currency-indicator]",
     );
+    this.accountArea = document.querySelector(
+      ".sf-page-header .sf-account-area",
+    );
+    this.mainArea = document.querySelector(".sf-main-area");
 
     this.portfolioOverviewViews = document.querySelectorAll(
       "[data-portfolio-overview]",
@@ -922,6 +929,73 @@ const SteerfoldApp = {
         );
       },
     );
+  },
+
+  setupExportControls() {
+    if (
+      !this.accountArea ||
+      this.accountArea.querySelector(".sf-export-control")
+    ) {
+      return;
+    }
+
+    const wrapper = document.createElement("div");
+    const button = document.createElement("button");
+    const icon = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "svg",
+    );
+    const path = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "path",
+    );
+    const label = document.createElement("span");
+
+    wrapper.className = "sf-export-control";
+
+    button.type = "button";
+    button.className = "sf-export-button";
+    button.setAttribute(
+      "aria-label",
+      "Export current view as PDF",
+    );
+    button.title = "Export current view as PDF";
+
+    icon.classList.add("sf-button-icon");
+    icon.setAttribute("viewBox", "0 0 24 24");
+    icon.setAttribute("aria-hidden", "true");
+    icon.setAttribute("focusable", "false");
+
+    path.setAttribute(
+      "d",
+      "M12 3v12m0 0 4-4m-4 4-4-4M5 19h14",
+    );
+
+    label.className = "sf-export-button-label";
+    label.textContent = "Export PDF";
+
+    icon.append(path);
+    button.append(
+      icon,
+      label,
+    );
+
+    wrapper.append(
+      button,
+    );
+
+    this.accountArea.append(wrapper);
+
+    this.exportControl = wrapper;
+    this.exportButton = button;
+
+    button.addEventListener("click", () => {
+      this.handlePdfExport();
+    });
+  },
+
+  handlePdfExport() {
+    printCurrentView();
   },
 
   handleProjectSort(key) {
