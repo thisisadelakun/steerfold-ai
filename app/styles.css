@@ -970,6 +970,69 @@ select {
   cursor: not-allowed;
 }
 
+.sf-analysis-header {
+  align-items: center;
+}
+
+.sf-analysis-control {
+  display: grid;
+  gap: 6px;
+  min-width: 220px;
+  color: var(--sf-text-secondary);
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.sf-analysis-control select {
+  min-height: 40px;
+  min-width: 0;
+  width: 100%;
+  padding: 0 34px 0 12px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary);
+}
+
+.sf-analysis-control select:focus {
+  border-color: var(--sf-accent);
+  outline: 2px solid var(--sf-accent);
+  outline-offset: 2px;
+}
+
+.sf-analysis-subheader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-bottom: 18px;
+}
+
+.sf-analysis-subheader h3 {
+  margin: 0;
+  color: var(--sf-text-primary);
+  font-size: 1rem;
+  line-height: 1.3;
+}
+
+.sf-analysis-subheader p {
+  margin: 6px 0 0;
+  color: var(--sf-text-secondary);
+  font-size: 0.9rem;
+}
+
+.sf-radar-project-control {
+  max-width: 320px;
+}
+
+.sf-chart-empty {
+  margin: 0;
+  padding: 26px 0;
+  color: var(--sf-text-secondary);
+  text-align: center;
+}
+
 .sf-project-pagination {
   display: flex;
   align-items: center;
@@ -1186,6 +1249,404 @@ select {
 
 
 /* =========================================================
+   PORTFOLIO ANALYSIS CHARTS
+   ========================================================= */
+
+.sf-budget-actual-rows,
+.sf-project-risk-rows {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.sf-budget-actual-row,
+.sf-project-risk-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(220px, 1fr) minmax(190px, auto);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--sf-border);
+}
+
+.sf-budget-actual-row:last-child,
+.sf-project-risk-row:last-child {
+  border-bottom: none;
+}
+
+.sf-budget-actual-name,
+.sf-project-risk-name {
+  min-width: 0;
+  color: var(--sf-text-primary);
+  font-size: 0.9rem;
+  font-weight: 650;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.sf-budget-actual-bars {
+  display: grid;
+  gap: 7px;
+  min-width: 0;
+}
+
+.sf-budget-actual-track,
+.sf-project-risk-track {
+  min-width: 0;
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--sf-bg);
+}
+
+.sf-budget-actual-bar,
+.sf-project-risk-bar {
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+}
+
+.sf-project-risk-bar.sf-health-cell--success {
+  background: var(--sf-success);
+}
+
+.sf-project-risk-bar.sf-health-cell--warning {
+  background: var(--sf-warning);
+}
+
+.sf-project-risk-bar.sf-health-cell--danger {
+  background: var(--sf-danger);
+}
+
+.sf-budget-bar--bac {
+  background: var(--sf-accent);
+}
+
+.sf-budget-bar--actual {
+  background: var(--sf-warning);
+}
+
+.sf-budget-actual-values,
+.sf-project-risk-value {
+  color: var(--sf-text-secondary);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.sf-completion-chart-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  padding-bottom: 6px;
+}
+
+.sf-completion-columns {
+  display: grid;
+  grid-auto-columns: minmax(82px, 1fr);
+  grid-auto-flow: column;
+  align-items: end;
+  gap: 14px;
+  min-width: max(100%, 760px);
+  min-height: 290px;
+  padding-top: 8px;
+}
+
+.sf-completion-column {
+  display: grid;
+  grid-template-rows: auto 180px auto;
+  gap: 8px;
+  min-width: 0;
+  text-align: center;
+}
+
+.sf-completion-value {
+  color: var(--sf-text-primary);
+  font-size: 0.82rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-completion-bar-wrap {
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  min-width: 0;
+  height: 180px;
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-bg);
+}
+
+.sf-completion-bar {
+  width: min(34px, 70%);
+  min-height: 2px;
+  border-radius: var(--sf-radius-sm) var(--sf-radius-sm) 0 0;
+  background: var(--sf-accent);
+}
+
+.sf-completion-label {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  color: var(--sf-text-secondary);
+  font-size: 0.72rem;
+  line-height: 1.25;
+}
+
+.sf-donut-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+}
+
+.sf-donut-svg {
+  width: min(260px, 100%);
+  height: auto;
+}
+
+.sf-donut-ring-background,
+.sf-donut-slice {
+  fill: none;
+  stroke-width: 18;
+}
+
+.sf-donut-ring-background {
+  stroke: var(--sf-bg);
+}
+
+.sf-donut-slice {
+  stroke-linecap: butt;
+  transform: rotate(-90deg);
+  transform-origin: center;
+}
+
+.sf-donut-slice--success {
+  stroke: var(--sf-success);
+}
+
+.sf-donut-slice--warning {
+  stroke: var(--sf-warning);
+}
+
+.sf-donut-slice--danger {
+  stroke: var(--sf-danger);
+}
+
+.sf-donut-slice--accent {
+  stroke: var(--sf-accent);
+}
+
+.sf-donut-total,
+.sf-donut-label {
+  text-anchor: middle;
+}
+
+.sf-donut-total {
+  fill: var(--sf-text-primary);
+  font-size: 1.35rem;
+  font-weight: 750;
+}
+
+.sf-donut-label {
+  fill: var(--sf-text-secondary);
+  font-size: 0.52rem;
+}
+
+.sf-donut-legend {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sf-donut-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  color: var(--sf-text-secondary);
+  font-size: 0.9rem;
+}
+
+.sf-donut-legend-marker {
+  width: 10px;
+  height: 10px;
+  flex: 0 0 10px;
+  border-radius: 50%;
+}
+
+.sf-donut-legend-marker.sf-donut-slice--success {
+  background: var(--sf-success);
+}
+
+.sf-donut-legend-marker.sf-donut-slice--warning {
+  background: var(--sf-warning);
+}
+
+.sf-donut-legend-marker.sf-donut-slice--danger {
+  background: var(--sf-danger);
+}
+
+.sf-donut-legend-marker.sf-donut-slice--accent {
+  background: var(--sf-accent);
+}
+
+.sf-health-heatmap-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-elevated);
+}
+
+.sf-health-heatmap-table {
+  width: 100%;
+  min-width: 820px;
+  border-collapse: collapse;
+}
+
+.sf-health-heatmap-table th,
+.sf-health-heatmap-table td {
+  padding: 12px;
+  border-bottom: 1px solid var(--sf-border);
+  color: var(--sf-text-secondary);
+  font-size: 0.84rem;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.sf-health-heatmap-table th {
+  color: var(--sf-text-primary);
+  font-weight: 700;
+}
+
+.sf-health-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 54px;
+  min-height: 28px;
+  padding: 4px 8px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  color: var(--sf-text-primary);
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-health-cell--success {
+  border-color: rgba(85, 182, 133, 0.45);
+  color: var(--sf-success);
+}
+
+.sf-health-cell--warning {
+  border-color: rgba(215, 162, 74, 0.48);
+  color: var(--sf-warning);
+}
+
+.sf-health-cell--danger {
+  border-color: rgba(217, 101, 101, 0.5);
+  color: var(--sf-danger);
+}
+
+.sf-health-cell--neutral,
+.sf-health-cell--completion {
+  color: var(--sf-text-secondary);
+}
+
+.sf-health-cell--completion {
+  border-color: rgba(124, 155, 255, 0.45);
+  background: rgba(124, 155, 255, 0.08);
+}
+
+.sf-radar-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 360px) minmax(0, 1fr);
+  align-items: center;
+  gap: 24px;
+  min-width: 0;
+}
+
+.sf-radar-svg {
+  width: min(360px, 100%);
+  height: auto;
+}
+
+.sf-radar-grid {
+  fill: none;
+  stroke: rgba(167, 171, 178, 0.18);
+  stroke-width: 1;
+}
+
+.sf-radar-axis {
+  stroke: rgba(167, 171, 178, 0.24);
+  stroke-width: 1;
+}
+
+.sf-radar-label {
+  fill: var(--sf-text-secondary);
+  font-size: 0.48rem;
+  text-anchor: middle;
+  dominant-baseline: middle;
+}
+
+.sf-radar-polygon {
+  fill: rgba(124, 155, 255, 0.22);
+  stroke: var(--sf-accent);
+  stroke-width: 2;
+}
+
+.sf-radar-point {
+  fill: var(--sf-text-primary);
+  stroke: var(--sf-accent);
+  stroke-width: 1.5;
+}
+
+.sf-radar-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px 18px;
+  margin: 0;
+}
+
+.sf-radar-summary dt {
+  color: var(--sf-text-secondary);
+}
+
+.sf-radar-summary dd {
+  margin: 0;
+  color: var(--sf-text-primary);
+  font-weight: 750;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (max-width: 720px) {
+  .sf-analysis-header,
+  .sf-analysis-subheader,
+  .sf-donut-layout,
+  .sf-radar-layout {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .sf-analysis-control,
+  .sf-radar-project-control {
+    width: 100%;
+    max-width: none;
+  }
+
+  .sf-budget-actual-row,
+  .sf-project-risk-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
+  .sf-budget-actual-values,
+  .sf-project-risk-value {
+    white-space: normal;
+  }
+}
+
+
+/* =========================================================
    STATUS BADGES
    ========================================================= */
 
@@ -1332,7 +1793,7 @@ select {
 
 /* Small visual label near the target marker */
 .sf-evm-target::after {
-  content: "1.00 target";
+  content: "Target";
   position: absolute;
   top: -20px;
   left: 50%;

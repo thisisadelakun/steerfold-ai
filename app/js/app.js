@@ -20,7 +20,6 @@ import {
   getPortfolioStatusSummary,
   getPortfolioFinancialSummary,
   getPortfolioRiskProfile,
-  getRiskCompletionData,
   getResourceDemandByStatus,
   calculatePortfolioEvmSummary,
   calculatePortfolioForecast,
@@ -34,6 +33,13 @@ import {
   createFinancialPerformanceChart,
   createRiskCompletionChart,
   createResourceDemandChart,
+  createBudgetActualChart,
+  createProjectCompletionChart,
+  createProjectRiskChart,
+  createStatusDistributionChart,
+  createPriorityDistributionChart,
+  createProjectHealthHeatmap,
+  createProjectHealthRadar,
   createPortfolioEvmPerformanceChart,
   createPortfolioForecastChart,
   createProjectVarianceChart,
@@ -152,6 +158,54 @@ const PROJECT_PAGE_SIZES = [
   100,
 ];
 
+const PORTFOLIO_ANALYSES = {
+  "risk-completion": {
+    title: "Risk vs Project Completion",
+    description:
+      "Identify projects that combine elevated risk with lower completion.",
+  },
+  "resource-demand": {
+    title: "Resource Demand by Project Status",
+    description:
+      "Compare resource pressure across On Track, At Risk and Critical projects.",
+  },
+  "budget-actual": {
+    title: "Budget vs Actual Cost",
+    description:
+      "Compare approved project budgets with actual cost incurred to date.",
+  },
+  "project-completion": {
+    title: "Project Completion",
+    description:
+      "Compare delivery progress across projects.",
+  },
+  "project-risk": {
+    title: "Project Risk",
+    description:
+      "Compare current risk exposure across projects.",
+  },
+  "status-distribution": {
+    title: "Portfolio Status Distribution",
+    description:
+      "See the proportion of projects across current portfolio health statuses.",
+  },
+  "priority-distribution": {
+    title: "Strategic Priority Distribution",
+    description:
+      "Review how the portfolio is distributed across strategic priority levels.",
+  },
+  "health-heatmap": {
+    title: "Project Health Heatmap",
+    description:
+      "Scan project performance and delivery signals across the portfolio.",
+  },
+  "health-radar": {
+    title: "Project Health Radar",
+    description:
+      "Review a normalized performance profile for an individual project.",
+  },
+};
+
 const SteerfoldApp = {
   state: {
     projects: [],
@@ -174,6 +228,10 @@ const SteerfoldApp = {
     resourceDemand: "all",
   },
 
+  portfolioChartSelection: "risk-completion",
+
+  portfolioRadarProjectId: null,
+
     init() {
     document.documentElement.dataset.sfReady = "true";
 
@@ -185,6 +243,7 @@ const SteerfoldApp = {
     this.setupProjectSorting();
     this.setupProjectResultCount();
     this.setupProjectPagination();
+    this.setupPortfolioAnalysis();
     this.setupRouting();
     this.setupAuthChanges();
     initAuthUI();
@@ -255,13 +314,28 @@ const SteerfoldApp = {
       "[data-financial-chart]",
     );
 
-    this.riskCompletionChart =
-  document.querySelector(
-    "[data-risk-completion-chart]",
-  );
+    this.portfolioAnalysisTitle = document.querySelector(
+      "[data-portfolio-analysis-title]",
+    );
 
-    this.resourceDemandChart = document.querySelector(
-      "[data-resource-demand-chart]",
+    this.portfolioAnalysisDescription = document.querySelector(
+      "[data-portfolio-analysis-description]",
+    );
+
+    this.portfolioAnalysisSelect = document.querySelector(
+      "[data-portfolio-analysis-select]",
+    );
+
+    this.portfolioAnalysisChart = document.querySelector(
+      "[data-portfolio-analysis-chart]",
+    );
+
+    this.radarProjectControl = document.querySelector(
+      "[data-radar-project-control]",
+    );
+
+    this.radarProjectSelect = document.querySelector(
+      "[data-radar-project-select]",
     );
 
     this.evmPerformance = document.querySelector(
@@ -816,6 +890,39 @@ const SteerfoldApp = {
     });
   },
 
+  setupPortfolioAnalysis() {
+    this.portfolioAnalysisSelect?.addEventListener(
+      "change",
+      () => {
+        if (
+          Object.hasOwn(
+            PORTFOLIO_ANALYSES,
+            this.portfolioAnalysisSelect.value,
+          )
+        ) {
+          this.portfolioChartSelection =
+            this.portfolioAnalysisSelect.value;
+        }
+
+        this.renderPortfolioAnalysis(
+          this.state.projects,
+        );
+      },
+    );
+
+    this.radarProjectSelect?.addEventListener(
+      "change",
+      () => {
+        this.portfolioRadarProjectId =
+          this.radarProjectSelect.value || null;
+
+        this.renderPortfolioAnalysis(
+          this.state.projects,
+        );
+      },
+    );
+  },
+
   handleProjectSort(key) {
     const column = PROJECT_SORT_COLUMNS.find(
       (sortColumn) => sortColumn.key === key,
@@ -893,8 +1000,7 @@ const SteerfoldApp = {
 
       this.renderKpis(projects);
       this.renderFinancialPerformance(projects);
-      this.renderRiskCompletion(projects);
-      this.renderResourceDemand(projects);
+      this.renderPortfolioAnalysis(projects);
       this.renderPortfolioInsights(projects);
       this.renderBudgetKpis(projects);
       this.renderEvmPerformance(projects);
@@ -1528,26 +1634,146 @@ renderFinancialPerformance(projects) {
   this.financialChart.replaceChildren(chart);
 },
 
-renderRiskCompletion(projects) {
-  const riskData =
-    getRiskCompletionData(projects);
+renderPortfolioAnalysis(projects) {
+  if (!this.portfolioAnalysisChart) {
+    return;
+  }
+
+  const analysis =
+    PORTFOLIO_ANALYSES[this.portfolioChartSelection] ??
+    PORTFOLIO_ANALYSES["risk-completion"];
+
+  if (this.portfolioAnalysisSelect) {
+    this.portfolioAnalysisSelect.value =
+      this.portfolioChartSelection;
+  }
+
+  if (this.portfolioAnalysisTitle) {
+    this.portfolioAnalysisTitle.textContent =
+      analysis.title;
+  }
+
+  if (this.portfolioAnalysisDescription) {
+    this.portfolioAnalysisDescription.textContent =
+      analysis.description;
+  }
+
+  this.updateRadarProjectControl(projects);
 
   const chart =
-    createRiskCompletionChart(riskData);
+    this.createSelectedPortfolioAnalysisChart(projects);
 
-  this.riskCompletionChart.replaceChildren(
-    chart,
-  );
+  this.portfolioAnalysisChart.replaceChildren(chart);
 },
 
-renderResourceDemand(projects) {
-  const demandData =
-    getResourceDemandByStatus(projects);
+updateRadarProjectControl(projects) {
+  const isRadar =
+    this.portfolioChartSelection === "health-radar";
 
-  const chart =
-    createResourceDemandChart(demandData);
+  if (this.radarProjectControl) {
+    this.radarProjectControl.hidden = !isRadar;
+  }
 
-  this.resourceDemandChart.replaceChildren(chart);
+  if (!this.radarProjectSelect || !isRadar) {
+    return;
+  }
+
+  const currentSelection =
+    this.portfolioRadarProjectId;
+
+  this.radarProjectSelect.replaceChildren();
+
+  projects.forEach((project) => {
+    if (!project.projectId) {
+      return;
+    }
+
+    const option =
+      document.createElement("option");
+
+    option.value = project.projectId;
+    option.textContent =
+      project.projectName || project.projectId;
+
+    this.radarProjectSelect.append(option);
+  });
+
+  const hasCurrentSelection = projects.some((project) => {
+    return project.projectId === currentSelection;
+  });
+
+  if (!hasCurrentSelection) {
+    this.portfolioRadarProjectId =
+      projects[0]?.projectId ?? null;
+  }
+
+  if (this.portfolioRadarProjectId) {
+    this.radarProjectSelect.value =
+      this.portfolioRadarProjectId;
+  }
+},
+
+createSelectedPortfolioAnalysisChart(projects) {
+  if (
+    !projects.length &&
+    this.portfolioChartSelection === "health-radar"
+  ) {
+    return createProjectHealthRadar(null);
+  }
+
+  if (!projects.length) {
+    const message =
+      document.createElement("p");
+
+    message.className = "sf-chart-empty";
+    message.textContent =
+      "No project data is available for this analysis.";
+
+    return message;
+  }
+
+  if (this.portfolioChartSelection === "resource-demand") {
+    return createResourceDemandChart(
+      getResourceDemandByStatus(projects),
+    );
+  }
+
+  if (this.portfolioChartSelection === "budget-actual") {
+    return createBudgetActualChart(projects);
+  }
+
+  if (this.portfolioChartSelection === "project-completion") {
+    return createProjectCompletionChart(projects);
+  }
+
+  if (this.portfolioChartSelection === "project-risk") {
+    return createProjectRiskChart(projects);
+  }
+
+  if (this.portfolioChartSelection === "status-distribution") {
+    return createStatusDistributionChart(projects);
+  }
+
+  if (this.portfolioChartSelection === "priority-distribution") {
+    return createPriorityDistributionChart(projects);
+  }
+
+  if (this.portfolioChartSelection === "health-heatmap") {
+    return createProjectHealthHeatmap(projects);
+  }
+
+  if (this.portfolioChartSelection === "health-radar") {
+    const project = projects.find((candidate) => {
+      return (
+        candidate.projectId ===
+        this.portfolioRadarProjectId
+      );
+    });
+
+    return createProjectHealthRadar(project);
+  }
+
+  return createRiskCompletionChart(projects);
 },
 
 renderEvmPerformance(projects) {

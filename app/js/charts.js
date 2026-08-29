@@ -1,5 +1,7 @@
 import { formatCurrency } from "./formatters.js";
 
+import { APP_CONFIG } from "./app-config.js";
+
 /*
  * ---------------------------------------------------------
  * PORTFOLIO FINANCIAL PERFORMANCE
@@ -589,6 +591,872 @@ export function createResourceDemandChart(data) {
   return figure;
 }
 
+function clamp(value, min, max) {
+  return Math.min(
+    Math.max(value, min),
+    max,
+  );
+}
+
+function safeNumber(value, fallback = 0) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function createChartEmptyMessage(message) {
+  const element = document.createElement("p");
+
+  element.className = "sf-chart-empty";
+  element.textContent = message;
+
+  return element;
+}
+
+function createAnalysisFigure(className) {
+  const figure = document.createElement("figure");
+
+  figure.classList.add(
+    "sf-chart",
+    className,
+  );
+
+  return figure;
+}
+
+function getProjectName(project) {
+  return project.projectName || project.projectId || "Unnamed project";
+}
+
+function getStatusClass(status) {
+  if (status === "Critical") {
+    return "sf-status-badge--critical";
+  }
+
+  if (status === "At Risk") {
+    return "sf-status-badge--at-risk";
+  }
+
+  return "sf-status-badge--on-track";
+}
+
+function getPriorityClass(priority) {
+  if (priority === "High") {
+    return "sf-health-cell--warning";
+  }
+
+  if (priority === "Low") {
+    return "sf-health-cell--success";
+  }
+
+  return "sf-health-cell--neutral";
+}
+
+function getRiskClass(riskScore) {
+  const { lowMax, mediumMax } =
+    APP_CONFIG.portfolio.riskScoreBands;
+
+  if (riskScore <= lowMax) {
+    return "sf-health-cell--success";
+  }
+
+  if (riskScore <= mediumMax) {
+    return "sf-health-cell--warning";
+  }
+
+  return "sf-health-cell--danger";
+}
+
+function getPerformanceClass(value) {
+  const { warningIndex, targetIndex } =
+    APP_CONFIG.portfolio.performanceThresholds;
+
+  if (!Number.isFinite(value)) {
+    return "sf-health-cell--neutral";
+  }
+
+  if (value < warningIndex) {
+    return "sf-health-cell--danger";
+  }
+
+  if (value < targetIndex) {
+    return "sf-health-cell--warning";
+  }
+
+  return "sf-health-cell--success";
+}
+
+function calculateProjectCpi(project) {
+  const earnedValue = safeNumber(project.earnedValueEV);
+  const actualCost = safeNumber(project.actualCostAC);
+
+  if (actualCost <= 0) {
+    return null;
+  }
+
+  return earnedValue / actualCost;
+}
+
+function calculateProjectSpi(project) {
+  const earnedValue = safeNumber(project.earnedValueEV);
+  const plannedValue = safeNumber(project.plannedValuePV);
+
+  if (plannedValue <= 0) {
+    return null;
+  }
+
+  return earnedValue / plannedValue;
+}
+
+function formatIndex(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : "—";
+}
+
+export function createBudgetActualChart(projects) {
+  const figure = createAnalysisFigure("sf-budget-actual-chart");
+
+  if (!projects.length) {
+    figure.append(
+      createChartEmptyMessage(
+        "No project data is available for this analysis.",
+      ),
+    );
+    return figure;
+  }
+
+  const legend = document.createElement("div");
+  const chart = document.createElement("div");
+  const caption = document.createElement("figcaption");
+  const maximumValue = Math.max(
+    ...projects.flatMap((project) => [
+      safeNumber(project.budgetBAC),
+      safeNumber(project.actualCostAC),
+    ]),
+    1,
+  );
+
+  legend.className = "sf-chart-legend";
+  chart.className = "sf-budget-actual-rows";
+  caption.className = "sf-chart-caption";
+  caption.textContent =
+    "Each row compares approved budget against actual cost incurred to date.";
+
+  [
+    ["Budget at Completion (BAC)", "sf-budget-bar--bac"],
+    ["Actual Cost (AC)", "sf-budget-bar--actual"],
+  ].forEach(([label, className]) => {
+    const item = document.createElement("span");
+    const marker = document.createElement("span");
+
+    item.className = "sf-chart-legend-item";
+    marker.classList.add(
+      "sf-chart-legend-marker",
+      className,
+    );
+
+    item.append(
+      marker,
+      document.createTextNode(label),
+    );
+    legend.append(item);
+  });
+
+  projects.forEach((project) => {
+    const budget = safeNumber(project.budgetBAC);
+    const actual = safeNumber(project.actualCostAC);
+    const row = document.createElement("div");
+    const name = document.createElement("div");
+    const bars = document.createElement("div");
+    const budgetTrack = document.createElement("div");
+    const actualTrack = document.createElement("div");
+    const budgetBar = document.createElement("div");
+    const actualBar = document.createElement("div");
+    const values = document.createElement("div");
+
+    row.className = "sf-budget-actual-row";
+    name.className = "sf-budget-actual-name";
+    bars.className = "sf-budget-actual-bars";
+    budgetTrack.className = "sf-budget-actual-track";
+    actualTrack.className = "sf-budget-actual-track";
+    budgetBar.className = "sf-budget-actual-bar sf-budget-bar--bac";
+    actualBar.className = "sf-budget-actual-bar sf-budget-bar--actual";
+    values.className = "sf-budget-actual-values";
+
+    name.textContent = getProjectName(project);
+    budgetBar.style.width =
+      `${clamp((budget / maximumValue) * 100, 0, 100)}%`;
+    actualBar.style.width =
+      `${clamp((actual / maximumValue) * 100, 0, 100)}%`;
+    values.textContent =
+      `BAC ${formatCurrency(budget)} | AC ${formatCurrency(actual)}`;
+
+    row.setAttribute(
+      "aria-label",
+      `${name.textContent}: Budget at Completion ${formatCurrency(budget)}, Actual Cost ${formatCurrency(actual)}`,
+    );
+
+    budgetTrack.append(budgetBar);
+    actualTrack.append(actualBar);
+    bars.append(
+      budgetTrack,
+      actualTrack,
+    );
+    row.append(
+      name,
+      bars,
+      values,
+    );
+    chart.append(row);
+  });
+
+  figure.append(
+    legend,
+    chart,
+    caption,
+  );
+
+  return figure;
+}
+
+export function createProjectCompletionChart(projects) {
+  const figure = createAnalysisFigure("sf-completion-chart");
+
+  if (!projects.length) {
+    figure.append(
+      createChartEmptyMessage(
+        "No project data is available for this analysis.",
+      ),
+    );
+    return figure;
+  }
+
+  const wrap = document.createElement("div");
+  const chart = document.createElement("div");
+  const caption = document.createElement("figcaption");
+
+  wrap.className = "sf-completion-chart-wrap";
+  chart.className = "sf-completion-columns";
+  caption.className = "sf-chart-caption";
+  caption.textContent =
+    "Percent complete is shown on a fixed 0-100% scale.";
+
+  projects.forEach((project) => {
+    const completion = clamp(
+      safeNumber(project.percentComplete) * 100,
+      0,
+      100,
+    );
+    const item = document.createElement("div");
+    const value = document.createElement("strong");
+    const barWrap = document.createElement("div");
+    const bar = document.createElement("div");
+    const label = document.createElement("span");
+
+    item.className = "sf-completion-column";
+    value.className = "sf-completion-value";
+    barWrap.className = "sf-completion-bar-wrap";
+    bar.className = "sf-completion-bar";
+    label.className = "sf-completion-label";
+
+    value.textContent = `${Math.round(completion)}%`;
+    bar.style.height = `${completion}%`;
+    label.textContent = getProjectName(project);
+    item.setAttribute(
+      "aria-label",
+      `${label.textContent}: ${Math.round(completion)}% complete`,
+    );
+
+    barWrap.append(bar);
+    item.append(
+      value,
+      barWrap,
+      label,
+    );
+    chart.append(item);
+  });
+
+  wrap.append(chart);
+  figure.append(
+    wrap,
+    caption,
+  );
+
+  return figure;
+}
+
+export function createProjectRiskChart(projects) {
+  const figure = createAnalysisFigure("sf-project-risk-chart");
+
+  if (!projects.length) {
+    figure.append(
+      createChartEmptyMessage(
+        "No project data is available for this analysis.",
+      ),
+    );
+    return figure;
+  }
+
+  const chart = document.createElement("div");
+  const caption = document.createElement("figcaption");
+  const sortedProjects = [...projects].sort((a, b) => {
+    return safeNumber(b.riskScore) - safeNumber(a.riskScore);
+  });
+  const maximumRisk = Math.max(
+    ...sortedProjects.map((project) => safeNumber(project.riskScore)),
+    25,
+  );
+
+  chart.className = "sf-project-risk-rows";
+  caption.className = "sf-chart-caption";
+  caption.textContent =
+    "Risk scores use the configured portfolio risk bands.";
+
+  sortedProjects.forEach((project) => {
+    const riskScore = safeNumber(project.riskScore);
+    const row = document.createElement("div");
+    const name = document.createElement("div");
+    const track = document.createElement("div");
+    const bar = document.createElement("div");
+    const value = document.createElement("strong");
+
+    row.className = "sf-project-risk-row";
+    name.className = "sf-project-risk-name";
+    track.className = "sf-project-risk-track";
+    bar.classList.add(
+      "sf-project-risk-bar",
+      getRiskClass(riskScore),
+    );
+    value.className = "sf-project-risk-value";
+
+    name.textContent = getProjectName(project);
+    bar.style.width =
+      `${clamp((riskScore / maximumRisk) * 100, 0, 100)}%`;
+    value.textContent = `${riskScore}/25`;
+
+    row.setAttribute(
+      "aria-label",
+      `${name.textContent}: Risk Score ${riskScore} out of 25`,
+    );
+
+    track.append(bar);
+    row.append(
+      name,
+      track,
+      value,
+    );
+    chart.append(row);
+  });
+
+  figure.append(
+    chart,
+    caption,
+  );
+
+  return figure;
+}
+
+function createDonutChart({
+  className,
+  title,
+  items,
+}) {
+  const figure = createAnalysisFigure(className);
+  const wrap = document.createElement("div");
+  const svg = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "svg",
+  );
+  const total = items.reduce((sum, item) => {
+    return sum + item.value;
+  }, 0);
+  const legend = document.createElement("div");
+  const caption = document.createElement("figcaption");
+  const radius = 42;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+
+  if (total === 0) {
+    figure.append(
+      createChartEmptyMessage(
+        "No project data is available for this analysis.",
+      ),
+    );
+    return figure;
+  }
+
+  wrap.className = "sf-donut-layout";
+  legend.className = "sf-donut-legend";
+  caption.className = "sf-chart-caption";
+  caption.textContent =
+    `${title} is calculated directly from current project records.`;
+
+  svg.setAttribute("viewBox", "0 0 120 120");
+  svg.setAttribute("role", "img");
+  svg.setAttribute("aria-label", `${title}: ${total} total projects`);
+  svg.classList.add("sf-donut-svg");
+
+  const background = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "circle",
+  );
+
+  background.setAttribute("cx", "60");
+  background.setAttribute("cy", "60");
+  background.setAttribute("r", String(radius));
+  background.classList.add("sf-donut-ring-background");
+  svg.append(background);
+
+  items.forEach((item) => {
+    const slice = document.createElementNS(
+      "http://www.w3.org/2000/svg",
+      "circle",
+    );
+    const dash = (item.value / total) * circumference;
+
+    slice.setAttribute("cx", "60");
+    slice.setAttribute("cy", "60");
+    slice.setAttribute("r", String(radius));
+    slice.setAttribute(
+      "stroke-dasharray",
+      `${dash} ${circumference - dash}`,
+    );
+    slice.setAttribute("stroke-dashoffset", String(-offset));
+    slice.classList.add(
+      "sf-donut-slice",
+      item.className,
+    );
+    svg.append(slice);
+
+    offset += dash;
+  });
+
+  const centerTotal = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "text",
+  );
+  const centerLabel = document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    "text",
+  );
+
+  centerTotal.setAttribute("x", "60");
+  centerTotal.setAttribute("y", "57");
+  centerTotal.classList.add("sf-donut-total");
+  centerTotal.textContent = String(total);
+
+  centerLabel.setAttribute("x", "60");
+  centerLabel.setAttribute("y", "72");
+  centerLabel.classList.add("sf-donut-label");
+  centerLabel.textContent = total === 1 ? "project" : "projects";
+
+  svg.append(
+    centerTotal,
+    centerLabel,
+  );
+
+  items.forEach((item) => {
+    const legendItem = document.createElement("span");
+    const marker = document.createElement("span");
+    const value = document.createElement("strong");
+
+    legendItem.className = "sf-donut-legend-item";
+    marker.classList.add(
+      "sf-donut-legend-marker",
+      item.className,
+    );
+    value.textContent = `${item.label} ${item.value}`;
+
+    legendItem.append(
+      marker,
+      value,
+    );
+    legend.append(legendItem);
+  });
+
+  wrap.append(
+    svg,
+    legend,
+  );
+  figure.append(
+    wrap,
+    caption,
+  );
+
+  return figure;
+}
+
+export function createStatusDistributionChart(projects) {
+  const counts = {
+    "On Track": 0,
+    "At Risk": 0,
+    Critical: 0,
+  };
+
+  projects.forEach((project) => {
+    if (Object.hasOwn(counts, project.projectStatus)) {
+      counts[project.projectStatus] += 1;
+    }
+  });
+
+  return createDonutChart({
+    className: "sf-status-distribution-chart",
+    title: "Portfolio Status Distribution",
+    items: [
+      {
+        label: "On Track",
+        value: counts["On Track"],
+        className: "sf-donut-slice--success",
+      },
+      {
+        label: "At Risk",
+        value: counts["At Risk"],
+        className: "sf-donut-slice--warning",
+      },
+      {
+        label: "Critical",
+        value: counts.Critical,
+        className: "sf-donut-slice--danger",
+      },
+    ],
+  });
+}
+
+export function createPriorityDistributionChart(projects) {
+  const counts = {
+    High: 0,
+    Medium: 0,
+    Low: 0,
+  };
+
+  projects.forEach((project) => {
+    if (Object.hasOwn(counts, project.strategicPriority)) {
+      counts[project.strategicPriority] += 1;
+    }
+  });
+
+  return createDonutChart({
+    className: "sf-priority-distribution-chart",
+    title: "Strategic Priority Distribution",
+    items: [
+      {
+        label: "High",
+        value: counts.High,
+        className: "sf-donut-slice--warning",
+      },
+      {
+        label: "Medium",
+        value: counts.Medium,
+        className: "sf-donut-slice--accent",
+      },
+      {
+        label: "Low",
+        value: counts.Low,
+        className: "sf-donut-slice--success",
+      },
+    ],
+  });
+}
+
+function createHealthCell(text, className = "sf-health-cell--neutral") {
+  const cell = document.createElement("td");
+  const value = document.createElement("span");
+
+  value.classList.add(
+    "sf-health-cell",
+    className,
+  );
+  value.textContent = text;
+  cell.append(value);
+
+  return cell;
+}
+
+export function createProjectHealthHeatmap(projects) {
+  const figure = createAnalysisFigure("sf-health-heatmap-chart");
+
+  if (!projects.length) {
+    figure.append(
+      createChartEmptyMessage(
+        "No project data is available for this analysis.",
+      ),
+    );
+    return figure;
+  }
+
+  const wrap = document.createElement("div");
+  const table = document.createElement("table");
+  const caption = document.createElement("figcaption");
+  const thead = document.createElement("thead");
+  const tbody = document.createElement("tbody");
+  const headerRow = document.createElement("tr");
+
+  wrap.className = "sf-health-heatmap-wrap";
+  table.className = "sf-health-heatmap-table";
+  caption.className = "sf-chart-caption";
+  caption.textContent =
+    "Heatmap colors supplement the readable values in each cell.";
+
+  [
+    "Project",
+    "CPI",
+    "SPI",
+    "Risk",
+    "Complete",
+    "Resources",
+    "Status",
+  ].forEach((headerText) => {
+    const header = document.createElement("th");
+
+    header.scope = "col";
+    header.textContent = headerText;
+    headerRow.append(header);
+  });
+
+  thead.append(headerRow);
+
+  projects.forEach((project) => {
+    const row = document.createElement("tr");
+    const projectCell = document.createElement("th");
+    const cpi = calculateProjectCpi(project);
+    const spi = calculateProjectSpi(project);
+    const riskScore = safeNumber(project.riskScore);
+    const completion = clamp(
+      safeNumber(project.percentComplete) * 100,
+      0,
+      100,
+    );
+
+    projectCell.scope = "row";
+    projectCell.textContent = getProjectName(project);
+
+    row.append(
+      projectCell,
+      createHealthCell(
+        formatIndex(cpi),
+        getPerformanceClass(cpi),
+      ),
+      createHealthCell(
+        formatIndex(spi),
+        getPerformanceClass(spi),
+      ),
+      createHealthCell(
+        String(riskScore),
+        getRiskClass(riskScore),
+      ),
+      createHealthCell(
+        `${Math.round(completion)}%`,
+        "sf-health-cell--completion",
+      ),
+      createHealthCell(
+        project.resourceDemand ?? "—",
+        getPriorityClass(project.resourceDemand),
+      ),
+      createHealthCell(
+        project.projectStatus ?? "—",
+        getStatusClass(project.projectStatus),
+      ),
+    );
+
+    tbody.append(row);
+  });
+
+  table.append(
+    thead,
+    tbody,
+  );
+  wrap.append(table);
+  figure.append(
+    wrap,
+    caption,
+  );
+
+  return figure;
+}
+
+function getRadarMetrics(project) {
+  const completion = clamp(
+    safeNumber(project.percentComplete) * 100,
+    0,
+    100,
+  );
+  const cpi = calculateProjectCpi(project);
+  const spi = calculateProjectSpi(project);
+  const riskScore = safeNumber(project.riskScore);
+
+  // Visualization-only resource mapping. This is not a stored KPI
+  // and not a project-management formula.
+  const resourceCapacityByDemand = {
+    Low: 100,
+    Medium: 60,
+    High: 30,
+  };
+
+  return [
+    {
+      label: "Completion",
+      value: completion,
+    },
+    {
+      label: "Cost Efficiency",
+      value: Number.isFinite(cpi) ? clamp(cpi * 100, 0, 100) : 0,
+    },
+    {
+      label: "Schedule Efficiency",
+      value: Number.isFinite(spi) ? clamp(spi * 100, 0, 100) : 0,
+    },
+    {
+      label: "Risk Health",
+      value: 100 - clamp((riskScore / 25) * 100, 0, 100),
+    },
+    {
+      label: "Resource Capacity",
+      value: resourceCapacityByDemand[project.resourceDemand] ?? 0,
+    },
+  ].map((metric) => {
+    return {
+      ...metric,
+      value: Math.round(clamp(metric.value, 0, 100)),
+    };
+  });
+}
+
+function getRadarPoint(index, value, radius, center) {
+  const angle =
+    -Math.PI / 2 + (index * 2 * Math.PI) / 5;
+  const scaledRadius = radius * (value / 100);
+
+  return {
+    x: center + Math.cos(angle) * scaledRadius,
+    y: center + Math.sin(angle) * scaledRadius,
+  };
+}
+
+function createSvgElement(name) {
+  return document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    name,
+  );
+}
+
+export function createProjectHealthRadar(project) {
+  const figure = createAnalysisFigure("sf-health-radar-chart");
+
+  if (!project) {
+    figure.append(
+      createChartEmptyMessage(
+        "No project is available for the radar analysis.",
+      ),
+    );
+    return figure;
+  }
+
+  const metrics = getRadarMetrics(project);
+  const layout = document.createElement("div");
+  const svg = createSvgElement("svg");
+  const summary = document.createElement("dl");
+  const center = 120;
+  const radius = 78;
+
+  layout.className = "sf-radar-layout";
+  svg.classList.add("sf-radar-svg");
+  svg.setAttribute("viewBox", "0 0 240 240");
+  svg.setAttribute("role", "img");
+  svg.setAttribute(
+    "aria-label",
+    `Project Health Radar for ${getProjectName(project)}`,
+  );
+  summary.className = "sf-radar-summary";
+
+  [20, 40, 60, 80, 100].forEach((ringValue) => {
+    const points = metrics.map((_, index) => {
+      const point = getRadarPoint(
+        index,
+        ringValue,
+        radius,
+        center,
+      );
+
+      return `${point.x},${point.y}`;
+    });
+    const polygon = createSvgElement("polygon");
+
+    polygon.setAttribute("points", points.join(" "));
+    polygon.classList.add("sf-radar-grid");
+    svg.append(polygon);
+  });
+
+  metrics.forEach((metric, index) => {
+    const axisEnd = getRadarPoint(index, 100, radius, center);
+    const labelPoint = getRadarPoint(index, 118, radius, center);
+    const line = createSvgElement("line");
+    const label = createSvgElement("text");
+
+    line.setAttribute("x1", String(center));
+    line.setAttribute("y1", String(center));
+    line.setAttribute("x2", String(axisEnd.x));
+    line.setAttribute("y2", String(axisEnd.y));
+    line.classList.add("sf-radar-axis");
+
+    label.setAttribute("x", String(labelPoint.x));
+    label.setAttribute("y", String(labelPoint.y));
+    label.classList.add("sf-radar-label");
+    label.textContent = metric.label;
+
+    svg.append(
+      line,
+      label,
+    );
+  });
+
+  const dataPoints = metrics.map((metric, index) => {
+    return getRadarPoint(
+      index,
+      metric.value,
+      radius,
+      center,
+    );
+  });
+  const polygon = createSvgElement("polygon");
+
+  polygon.setAttribute(
+    "points",
+    dataPoints.map((point) => `${point.x},${point.y}`).join(" "),
+  );
+  polygon.classList.add("sf-radar-polygon");
+  svg.append(polygon);
+
+  dataPoints.forEach((point) => {
+    const dot = createSvgElement("circle");
+
+    dot.setAttribute("cx", String(point.x));
+    dot.setAttribute("cy", String(point.y));
+    dot.setAttribute("r", "3.5");
+    dot.classList.add("sf-radar-point");
+    svg.append(dot);
+  });
+
+  metrics.forEach((metric) => {
+    const term = document.createElement("dt");
+    const description = document.createElement("dd");
+
+    term.textContent = metric.label;
+    description.textContent = String(metric.value);
+
+    summary.append(
+      term,
+      description,
+    );
+  });
+
+  layout.append(
+    svg,
+    summary,
+  );
+  figure.append(layout);
+
+  return figure;
+}
+
 /*
  * ---------------------------------------------------------
  * PORTFOLIO FORECAST
@@ -738,12 +1606,17 @@ export function createPortfolioEvmPerformanceChart(summary) {
   chart.classList.add("sf-evm-chart");
   caption.classList.add("sf-chart-caption");
 
+  const {
+    warningIndex,
+    targetIndex,
+  } = APP_CONFIG.portfolio.performanceThresholds;
+
   caption.textContent =
-    "A performance index of 1.00 represents the portfolio efficiency baseline.";
+    `A performance index of ${targetIndex.toFixed(2)} represents the portfolio efficiency baseline.`;
 
   // Common visual scale limits
   const SCALE_MAX = 1.2;
-  const TARGET = 1.0;
+  const TARGET = targetIndex;
   const TARGET_PCT = (TARGET / SCALE_MAX) * 100; // ~83.3333
 
   function renderRow(labelText, value) {
@@ -782,9 +1655,9 @@ export function createPortfolioEvmPerformanceChart(summary) {
       fill.style.width = `${pct}%`;
 
       // Semantics classes
-      if (value < 0.9) {
+      if (value < warningIndex) {
         fill.classList.add("sf-evm-fill--danger");
-      } else if (value < 1.0) {
+      } else if (value < targetIndex) {
         fill.classList.add("sf-evm-fill--warning");
       } else {
         fill.classList.add("sf-evm-fill--success");
@@ -815,7 +1688,7 @@ export function createPortfolioEvmPerformanceChart(summary) {
 
     // Accessibility: describe the metric
     const desc = hasNumber
-      ? `${labelText}: ${value.toFixed(2)}. Target 1.00.`
+      ? `${labelText}: ${value.toFixed(2)}. Target ${targetIndex.toFixed(2)}.`
       : `${labelText}: no data available.`;
 
     row.setAttribute("aria-label", desc);

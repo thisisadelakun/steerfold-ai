@@ -291,57 +291,65 @@
 </section>
 
 <section
-  class="sf-panel sf-analytics-panel"
-  aria-labelledby="risk-completion-title"
+  class="sf-panel sf-analytics-panel sf-portfolio-analysis-panel"
+  aria-labelledby="portfolio-analysis-title"
   data-portfolio-overview
-  data-risk-completion
+  data-portfolio-analysis
 >
-  <div class="sf-section-header">
+  <div class="sf-section-header sf-analysis-header">
     <div>
-      <h2 id="risk-completion-title">
-        Risk vs Project Completion
+      <h2 id="portfolio-analysis-title">
+        Portfolio Analysis
       </h2>
       <p>
+        Choose a portfolio view to explore performance, risk, cost, delivery and resource signals.
+      </p>
+    </div>
+
+    <label class="sf-analysis-control" for="portfolio-analysis-select">
+      <span>View analysis</span>
+      <select id="portfolio-analysis-select" data-portfolio-analysis-select>
+        <option value="risk-completion">Risk vs Completion</option>
+        <option value="resource-demand">Resource Demand by Status</option>
+        <option value="budget-actual">Budget vs Actual Cost</option>
+        <option value="project-completion">Project Completion</option>
+        <option value="project-risk">Project Risk</option>
+        <option value="status-distribution">Portfolio Status Distribution</option>
+        <option value="priority-distribution">Strategic Priority Distribution</option>
+        <option value="health-heatmap">Project Health Heatmap</option>
+        <option value="health-radar">Project Health Radar</option>
+      </select>
+    </label>
+  </div>
+
+  <div class="sf-analysis-subheader">
+    <div>
+      <h3 data-portfolio-analysis-title>
+        Risk vs Project Completion
+      </h3>
+      <p data-portfolio-analysis-description>
         Identify projects that combine elevated risk with lower completion.
       </p>
     </div>
+
+    <label
+      class="sf-analysis-control sf-radar-project-control"
+      for="portfolio-radar-project-select"
+      data-radar-project-control
+      hidden
+    >
+      <span>Project</span>
+      <select id="portfolio-radar-project-select" data-radar-project-select></select>
+    </label>
   </div>
 
   <div
     class="sf-chart-container"
-    data-risk-completion-chart
+    data-portfolio-analysis-chart
     aria-live="polite"
   >
     <p class="sf-chart-loading">
-      Loading risk analysis...
-    </p>
-  </div>
-</section>
-
-<section
-  class="sf-panel sf-analytics-panel"
-  aria-labelledby="resource-demand-title"
-  data-portfolio-overview
-  data-resource-demand
->
-  <div class="sf-section-header">
-    <div>
-      <h2 id="resource-demand-title">
-        Resource Demand by Project Status
-      </h2>
-      <p>
-        Compare resource pressure across On Track, At Risk and Critical projects.
-      </p>
-    </div>
-  </div>
-
-  <div
-    class="sf-chart-container"
-    data-resource-demand-chart
-    aria-live="polite"
-  >
-    <p class="sf-chart-loading">
-      Loading resource demand analysis...
+      Loading portfolio analysis...
     </p>
   </div>
 </section>
