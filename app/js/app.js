@@ -513,6 +513,7 @@ const SteerfoldApp = {
 
   setupSidebar() {
     this.appShell = document.querySelector(".sf-app-shell");
+    this.mainArea = document.querySelector(".sf-main-area");
     this.sidebar = document.querySelector("#sf-sidebar");
 
     this.sidebarToggle = document.querySelector(
@@ -983,6 +984,8 @@ const SteerfoldApp = {
   async loadDashboard({
     allowCsvFallback = true,
   } = {}) {
+    const loader = this.createDelayedLoader();
+
     this.renderTableMessage("Loading portfolio data...");
 
     try {
@@ -1026,7 +1029,89 @@ const SteerfoldApp = {
       if (!allowCsvFallback) {
         throw error;
       }
+    } finally {
+      await loader.hide();
     }
+  },
+
+  createDelayedLoader() {
+    const showDelay = 225;
+    const minimumVisibleTime = 300;
+    let isVisible = false;
+    let shownAt = 0;
+    let timeoutId = window.setTimeout(() => {
+      this.showAppLoader();
+      isVisible = true;
+      shownAt = Date.now();
+    }, showDelay);
+
+    return {
+      hide: async () => {
+        if (timeoutId) {
+          window.clearTimeout(timeoutId);
+          timeoutId = null;
+        }
+
+        if (!isVisible) {
+          return;
+        }
+
+        const elapsed = Date.now() - shownAt;
+        const remaining = minimumVisibleTime - elapsed;
+
+        if (remaining > 0) {
+          await new Promise((resolve) => {
+            window.setTimeout(resolve, remaining);
+          });
+        }
+
+        this.hideAppLoader();
+      },
+    };
+  },
+
+  showAppLoader() {
+    if (
+      !this.mainArea ||
+      this.mainArea.querySelector(".sf-app-loader")
+    ) {
+      return;
+    }
+
+    const loader = document.createElement("div");
+    const mark = document.createElement("div");
+    const ring = document.createElement("span");
+    const letter = document.createElement("span");
+    const text = document.createElement("p");
+
+    loader.className = "sf-app-loader";
+    loader.setAttribute("role", "status");
+    loader.setAttribute("aria-live", "polite");
+
+    mark.className = "sf-app-loader-mark";
+    ring.className = "sf-app-loader-ring";
+    letter.className = "sf-app-loader-letter";
+    letter.textContent = "S";
+
+    text.className = "sf-app-loader-text";
+    text.textContent = "Loading portfolio…";
+
+    mark.append(
+      ring,
+      letter,
+    );
+    loader.append(
+      mark,
+      text,
+    );
+
+    this.mainArea.append(loader);
+  },
+
+  hideAppLoader() {
+    this.mainArea
+      ?.querySelector(".sf-app-loader")
+      ?.remove();
   },
 
   applyFilters() {
@@ -2621,11 +2706,6 @@ renderProjectDetail(project) {
     const isExpanded =
       String(!isCollapsed);
 
-    const toggleText =
-      this.sidebarToggle.querySelector(
-        ".sf-sidebar-toggle-text",
-      );
-
     this.sidebarToggle.setAttribute(
       "aria-expanded",
       isExpanded,
@@ -2638,12 +2718,10 @@ renderProjectDetail(project) {
         : "Collapse sidebar",
     );
 
-    if (toggleText) {
-      toggleText.textContent =
-        isCollapsed
-          ? "Expand"
-          : "Collapse";
-    }
+    this.sidebarToggle.title =
+      isCollapsed
+        ? "Expand sidebar"
+        : "Collapse sidebar";
   },
 
   isSmallScreen() {
