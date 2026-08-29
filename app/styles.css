@@ -317,7 +317,9 @@ select {
 
 .sf-account-area {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
   min-width: 48px;
 }
 
@@ -367,6 +369,7 @@ select {
    ========================================================= */
 
 .sf-icon-button,
+.sf-tour-button,
 .sf-sidebar-toggle,
 .sf-mobile-menu-button,
 .sf-sidebar-close {
@@ -381,9 +384,16 @@ select {
 }
 
 .sf-icon-button,
+.sf-tour-button,
 .sf-mobile-menu-button,
 .sf-sidebar-close {
   width: 40px;
+}
+
+.sf-tour-button {
+  color: var(--sf-text-secondary);
+  font-size: 1rem;
+  font-weight: 750;
 }
 
 .sf-sidebar-toggle {
@@ -417,19 +427,156 @@ select {
 }
 
 .sf-icon-button:hover,
+.sf-tour-button:hover,
 .sf-sidebar-toggle:hover,
 .sf-mobile-menu-button:hover,
 .sf-sidebar-close:hover {
   border-color: var(--sf-accent);
+  color: var(--sf-text-primary);
 }
 
 .sf-icon-button:focus-visible,
+.sf-tour-button:focus-visible,
 .sf-sidebar-toggle:focus-visible,
 .sf-mobile-menu-button:focus-visible,
 .sf-sidebar-close:focus-visible {
   border-color: var(--sf-accent);
   outline: 2px solid var(--sf-accent);
   outline-offset: 2px;
+}
+
+
+/* =========================================================
+   ONBOARDING TOUR
+   ========================================================= */
+
+.sf-tour-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 160;
+  min-width: 0;
+  background: rgba(0, 0, 0, 0.28);
+}
+
+.sf-tour-spotlight {
+  position: fixed;
+  border: 2px solid var(--sf-accent);
+  border-radius: var(--sf-radius-md);
+  box-shadow:
+    0 0 0 9999px rgba(0, 0, 0, 0.72),
+    0 0 26px rgba(124, 155, 255, 0.34);
+  pointer-events: none;
+}
+
+.sf-tour-card {
+  position: fixed;
+  display: grid;
+  gap: 12px;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100vh - 32px);
+  overflow-y: auto;
+  padding: 18px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-md);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.62);
+}
+
+.sf-tour-card--centered {
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.sf-tour-progress {
+  margin: 0;
+  color: var(--sf-accent);
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0;
+  text-transform: uppercase;
+}
+
+.sf-tour-title {
+  margin: 0;
+  color: var(--sf-text-primary);
+  font-size: 1.18rem;
+  line-height: 1.25;
+}
+
+.sf-tour-copy {
+  margin: 0;
+  color: var(--sf-text-secondary);
+  font-size: 0.92rem;
+  line-height: 1.55;
+}
+
+.sf-tour-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.sf-tour-button-secondary,
+.sf-tour-button-primary {
+  min-height: 38px;
+  padding: 0 14px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  font-size: 0.88rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.sf-tour-button-secondary {
+  background: var(--sf-surface);
+  color: var(--sf-text-secondary);
+}
+
+.sf-tour-button-primary {
+  border-color: var(--sf-accent);
+  background: var(--sf-accent);
+  color: var(--sf-text-primary);
+}
+
+.sf-tour-button-secondary:hover {
+  border-color: var(--sf-accent);
+  color: var(--sf-text-primary);
+}
+
+.sf-tour-button-primary:hover {
+  border-color: var(--sf-accent);
+}
+
+.sf-tour-button-secondary:focus-visible,
+.sf-tour-button-primary:focus-visible {
+  outline: 2px solid var(--sf-accent);
+  outline-offset: 2px;
+}
+
+.sf-tour-button-secondary:disabled,
+.sf-tour-button-primary:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+@media (max-width: 560px) {
+  .sf-tour-card {
+    width: calc(100vw - 32px);
+    padding: 16px;
+  }
+
+  .sf-tour-actions {
+    justify-content: stretch;
+  }
+
+  .sf-tour-button-secondary,
+  .sf-tour-button-primary {
+    flex: 1 1 100%;
+  }
 }
 
 

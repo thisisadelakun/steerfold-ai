@@ -59,6 +59,8 @@ import {
 
 import { initAuthUI } from "./auth-ui.js";
 
+import { initOnboardingTour } from "./onboarding-tour.js";
+
 import { openProjectForm } from "./project-form.js";
 
 import { openConfirmDialog } from "./confirm-dialog.js";
@@ -186,6 +188,7 @@ const SteerfoldApp = {
     this.setupRouting();
     this.setupAuthChanges();
     initAuthUI();
+    initOnboardingTour();
     this.loadDashboard();
   },
 
