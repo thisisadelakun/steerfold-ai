@@ -3,11 +3,16 @@ import {
   getPortfolioFinancialSummary,
   calculatePortfolioEvmSummary,
   calculatePortfolioForecast,
+  calculateProjectEvm,
+  calculateProjectForecast,
+  calculateProjectDecisionSignals,
   getPriorityRecommendations,
 } from "./portfolio-analytics.js";
 
 import {
   formatCurrency,
+  formatDate,
+  formatPercent,
 } from "./formatters.js";
 
 import { APP_CONFIG } from "./app-config.js";
@@ -90,6 +95,7 @@ const PRIORITY_SEGMENTS = [
 
 let selectedAudienceKey = "executive";
 let currentProjects = [];
+let selectedSponsorProjectId = null;
 
 function getSelectedAudience() {
   return (
@@ -173,6 +179,143 @@ function getVacLanguage(vac) {
   }
 
   return "Forecast on budget.";
+}
+
+function clamp(value, min, max) {
+  return Math.min(
+    Math.max(value, min),
+    max,
+  );
+}
+
+function safeNumber(value, fallback = 0) {
+  const number = Number(value);
+
+  return Number.isFinite(number) ? number : fallback;
+}
+
+function formatMaybeCurrency(value) {
+  return Number.isFinite(value) ? formatCurrency(value) : "—";
+}
+
+function formatMaybeIndex(value) {
+  return Number.isFinite(value) ? value.toFixed(2) : "—";
+}
+
+function formatMaybePercent(value) {
+  return Number.isFinite(value) ? formatPercent(value) : "—";
+}
+
+function formatMaybeRiskScore(value) {
+  return Number.isFinite(value) ? `${value}/25` : "—";
+}
+
+function formatProjectDate(value) {
+  const stringValue = String(value ?? "");
+  const isoMatch = stringValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})$/,
+  );
+
+  if (isoMatch) {
+    const [, year, month, day] = isoMatch;
+
+    return new Intl.DateTimeFormat(
+      APP_CONFIG.portfolio.locale,
+      {
+        month: "short",
+        day: "numeric",
+        year: "numeric",
+      },
+    ).format(
+      new Date(
+        Number(year),
+        Number(month) - 1,
+        Number(day),
+      ),
+    );
+  }
+
+  return formatDate(value);
+}
+
+function getProjectName(project) {
+  return project?.projectName || project?.projectId || "Unnamed project";
+}
+
+function getStatusModifier(status) {
+  return String(status ?? "")
+    .toLowerCase()
+    .replace(/\s+/g, "-");
+}
+
+function getSponsorDefaultProject(projects) {
+  const recommendations = getPriorityRecommendations(projects);
+
+  if (recommendations.length > 0) {
+    return projects.find((project) => {
+      return project.projectId === recommendations[0].projectId;
+    });
+  }
+
+  return projects[0] ?? null;
+}
+
+function getSelectedSponsorProject(projects) {
+  const rememberedProject = projects.find((project) => {
+    return project.projectId === selectedSponsorProjectId;
+  });
+
+  if (rememberedProject) {
+    return rememberedProject;
+  }
+
+  const defaultProject = getSponsorDefaultProject(projects);
+  selectedSponsorProjectId = defaultProject?.projectId ?? null;
+
+  return defaultProject;
+}
+
+function createSponsorProjectSelector(projects) {
+  const control = document.createElement("div");
+  const label = document.createElement("label");
+  const select = document.createElement("select");
+  const selectedProject = getSelectedSponsorProject(projects);
+  const selectId = "stakeholder-sponsor-project";
+
+  control.className = "sf-sponsor-project-control";
+  label.setAttribute("for", selectId);
+  label.textContent = "Project";
+  select.id = selectId;
+  select.className = "sf-sponsor-project-select";
+
+  projects.forEach((project) => {
+    const option = document.createElement("option");
+
+    option.value = project.projectId;
+    option.textContent = getProjectName(project);
+    select.append(option);
+  });
+
+  if (selectedProject) {
+    select.value = selectedProject.projectId;
+  }
+
+  select.addEventListener("change", () => {
+    selectedSponsorProjectId = select.value;
+    const view = select.closest(".sf-stakeholder-view");
+
+    if (view) {
+      updateStakeholderView(view);
+      view.querySelector(".sf-sponsor-project-select")?.focus();
+    }
+  });
+
+  control.append(
+    label,
+    select,
+  );
+
+  return control;
 }
 
 function createAudienceSelector(container) {
@@ -792,6 +935,545 @@ function renderExecutiveSupportingDetail(container, projects) {
   );
 }
 
+function createSponsorEmptyState(container) {
+  const empty = document.createElement("p");
+
+  container.className =
+    "sf-stakeholder-section-content";
+  empty.className = "sf-stakeholder-placeholder";
+  empty.textContent =
+    "No project data is currently available for Sponsor View.";
+  container.replaceChildren(empty);
+}
+
+function renderSponsorKeySignals(container, project) {
+  const evm = calculateProjectEvm(project);
+  const progress = document.createElement("span");
+
+  progress.className = "sf-exec-performance-pair";
+  progress.textContent =
+    formatMaybePercent(project.percentComplete);
+
+  container.className =
+    "sf-stakeholder-section-content sf-sponsor-kpi-grid";
+  container.replaceChildren(
+    createKpiCard({
+      label: "Project Status",
+      value: project.projectStatus ?? "—",
+      support: `Risk ${formatMaybeRiskScore(project.riskScore)}`,
+      className: getNeedsAttentionClass({
+        critical: project.projectStatus === "Critical" ? 1 : 0,
+        atRisk: project.projectStatus === "At Risk" ? 1 : 0,
+      }),
+    }),
+    createKpiCard({
+      label: "Delivery Progress",
+      value: progress,
+      support:
+        `${formatProjectDate(project.startDate)} → ${formatProjectDate(project.endDate)}`,
+    }),
+    createKpiCard({
+      label: "Cost Performance",
+      value: formatMaybeIndex(evm.cpi),
+      support: `CV ${formatMaybeCurrency(evm.cv)}`,
+      className: getPerformanceClass(evm.cpi),
+    }),
+    createKpiCard({
+      label: "Schedule Performance",
+      value: formatMaybeIndex(evm.spi),
+      support: `SV ${formatMaybeCurrency(evm.sv)}`,
+      className: getPerformanceClass(evm.spi),
+    }),
+  );
+}
+
+function getSponsorRadarMetrics(project) {
+  const evm = calculateProjectEvm(project);
+  const completion = clamp(
+    safeNumber(project.percentComplete) * 100,
+    0,
+    100,
+  );
+  const riskScore = safeNumber(project.riskScore);
+  const resourceCapacityByDemand = {
+    Low: 100,
+    Medium: 60,
+    High: 30,
+  };
+
+  return [
+    {
+      label: "Completion",
+      value: completion,
+    },
+    {
+      label: "Cost Efficiency",
+      value: Number.isFinite(evm.cpi)
+        ? clamp(evm.cpi * 100, 0, 100)
+        : 0,
+    },
+    {
+      label: "Schedule Efficiency",
+      value: Number.isFinite(evm.spi)
+        ? clamp(evm.spi * 100, 0, 100)
+        : 0,
+    },
+    {
+      label: "Risk Health",
+      value: 100 - clamp((riskScore / 25) * 100, 0, 100),
+    },
+    {
+      label: "Resource Capacity",
+      value: resourceCapacityByDemand[project.resourceDemand] ?? 0,
+    },
+  ].map((metric) => {
+    return {
+      ...metric,
+      value: Math.round(clamp(metric.value, 0, 100)),
+    };
+  });
+}
+
+function getRadarPoint(index, value, radius, center) {
+  const angle =
+    -Math.PI / 2 + (index * 2 * Math.PI) / 5;
+  const scaledRadius = radius * (value / 100);
+
+  return {
+    x: center + Math.cos(angle) * scaledRadius,
+    y: center + Math.sin(angle) * scaledRadius,
+  };
+}
+
+function createSvgElement(name) {
+  return document.createElementNS(
+    "http://www.w3.org/2000/svg",
+    name,
+  );
+}
+
+function createSponsorHealthProfile(project) {
+  const wrapper = document.createElement("div");
+  const heading = document.createElement("h3");
+  const layout = document.createElement("div");
+  const svg = createSvgElement("svg");
+  const summary = document.createElement("dl");
+  const metrics = getSponsorRadarMetrics(project);
+  const center = 120;
+  const radius = 78;
+
+  wrapper.className = "sf-sponsor-health-profile";
+  heading.textContent = "Project Health Profile";
+  layout.className = "sf-sponsor-radar-layout";
+  svg.classList.add("sf-sponsor-radar-svg");
+  svg.setAttribute("viewBox", "0 0 240 240");
+  svg.setAttribute("role", "img");
+  svg.setAttribute(
+    "aria-label",
+    `Project Health Profile for ${getProjectName(project)}`,
+  );
+  summary.className = "sf-sponsor-radar-summary";
+
+  [20, 40, 60, 80, 100].forEach((ringValue) => {
+    const points = metrics.map((_, index) => {
+      const point = getRadarPoint(
+        index,
+        ringValue,
+        radius,
+        center,
+      );
+
+      return `${point.x},${point.y}`;
+    });
+    const polygon = createSvgElement("polygon");
+
+    polygon.setAttribute("points", points.join(" "));
+    polygon.classList.add("sf-sponsor-radar-grid");
+    svg.append(polygon);
+  });
+
+  metrics.forEach((metric, index) => {
+    const axisEnd = getRadarPoint(index, 100, radius, center);
+    const labelPoint = getRadarPoint(index, 118, radius, center);
+    const line = createSvgElement("line");
+    const label = createSvgElement("text");
+
+    line.setAttribute("x1", String(center));
+    line.setAttribute("y1", String(center));
+    line.setAttribute("x2", String(axisEnd.x));
+    line.setAttribute("y2", String(axisEnd.y));
+    line.classList.add("sf-sponsor-radar-axis");
+
+    label.setAttribute("x", String(labelPoint.x));
+    label.setAttribute("y", String(labelPoint.y));
+    label.classList.add("sf-sponsor-radar-label");
+    label.textContent = metric.label;
+
+    svg.append(
+      line,
+      label,
+    );
+  });
+
+  const dataPoints = metrics.map((metric, index) => {
+    return getRadarPoint(
+      index,
+      metric.value,
+      radius,
+      center,
+    );
+  });
+  const polygon = createSvgElement("polygon");
+
+  polygon.setAttribute(
+    "points",
+    dataPoints.map((point) => `${point.x},${point.y}`).join(" "),
+  );
+  polygon.classList.add("sf-sponsor-radar-polygon");
+  svg.append(polygon);
+
+  dataPoints.forEach((point) => {
+    const dot = createSvgElement("circle");
+
+    dot.setAttribute("cx", String(point.x));
+    dot.setAttribute("cy", String(point.y));
+    dot.setAttribute("r", "3.5");
+    dot.classList.add("sf-sponsor-radar-point");
+    svg.append(dot);
+  });
+
+  metrics.forEach((metric) => {
+    const term = document.createElement("dt");
+    const description = document.createElement("dd");
+
+    term.textContent = metric.label;
+    description.textContent = String(metric.value);
+    summary.append(
+      term,
+      description,
+    );
+  });
+
+  layout.append(
+    svg,
+    summary,
+  );
+  wrapper.append(
+    heading,
+    layout,
+  );
+
+  return wrapper;
+}
+
+function getSponsorForecastLanguage(vac) {
+  if (!Number.isFinite(vac)) {
+    return "Forecast variance is unavailable.";
+  }
+
+  if (vac < 0) {
+    return `Forecast is ${formatCurrency(Math.abs(vac))} over approved budget.`;
+  }
+
+  return "Forecast remains within approved budget.";
+}
+
+function createSponsorFinancialForecast(project) {
+  const evm = calculateProjectEvm(project);
+  const forecast = calculateProjectForecast(project);
+  const rows = [
+    {
+      label: "BAC",
+      value: evm.bac,
+      className: "sf-exec-bar--accent",
+    },
+    {
+      label: "AC",
+      value: evm.ac,
+      className: "sf-exec-bar--accent",
+    },
+    {
+      label: "EAC",
+      value: forecast.eac,
+      className:
+        Number.isFinite(forecast.vac) && forecast.vac < 0
+          ? "sf-exec-bar--danger"
+          : "sf-exec-bar--success",
+    },
+    {
+      label: "ETC",
+      value: forecast.etc,
+      className: "sf-exec-bar--accent",
+    },
+    {
+      label: "VAC",
+      value: forecast.vac,
+      className:
+        Number.isFinite(forecast.vac) && forecast.vac < 0
+          ? "sf-exec-bar--danger"
+          : "sf-exec-bar--success",
+    },
+  ];
+  const values = rows
+    .map((row) => row.value)
+    .filter(Number.isFinite);
+  const maxValue = Math.max(
+    ...values.map((value) => Math.abs(value)),
+    1,
+  );
+  const wrapper = document.createElement("div");
+  const heading = document.createElement("h3");
+  const rowList = document.createElement("div");
+  const outlook = document.createElement("p");
+
+  wrapper.className = "sf-sponsor-financial-forecast";
+  heading.textContent = "Financial Forecast";
+  rowList.className = "sf-exec-financial-bars";
+  outlook.className = "sf-exec-outlook-note";
+  outlook.textContent = getSponsorForecastLanguage(forecast.vac);
+
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    const label = document.createElement("span");
+    const value = document.createElement("strong");
+    const track = document.createElement("span");
+    const bar = document.createElement("span");
+    const numericValue =
+      Number.isFinite(row.value) ? row.value : null;
+    const width =
+      numericValue === null
+        ? 0
+        : Math.max(4, Math.abs(numericValue) / maxValue * 100);
+
+    item.className = "sf-exec-financial-row";
+    label.textContent = row.label;
+    value.textContent = formatMaybeCurrency(numericValue);
+    track.className = "sf-exec-bar-track";
+    bar.className = `sf-exec-bar ${row.className}`;
+    bar.style.width = `${width}%`;
+
+    track.append(bar);
+    item.append(
+      label,
+      value,
+      track,
+    );
+    rowList.append(item);
+  });
+
+  wrapper.append(
+    heading,
+    rowList,
+    outlook,
+  );
+
+  return wrapper;
+}
+
+function renderSponsorPerformance(container, project) {
+  container.className =
+    "sf-stakeholder-section-content sf-sponsor-performance-grid";
+  container.replaceChildren(
+    createSponsorHealthProfile(project),
+    createSponsorFinancialForecast(project),
+  );
+}
+
+function getSponsorAttentionSignals(project) {
+  const signals = calculateProjectDecisionSignals(project);
+  const items = [];
+
+  if (signals.costInefficient) {
+    items.push(
+      `CPI ${formatMaybeIndex(signals.cpi)} indicates cost performance below target.`,
+    );
+  }
+
+  if (signals.scheduleInefficient) {
+    items.push(
+      `SPI ${formatMaybeIndex(signals.spi)} indicates schedule performance below target.`,
+    );
+  }
+
+  if (signals.highRisk) {
+    items.push(`Risk score is ${formatMaybeRiskScore(project.riskScore)}.`);
+  }
+
+  if (signals.forecastOverBudget) {
+    items.push(
+      `Forecast cost exceeds approved budget by ${formatCurrency(Math.abs(signals.vac))}.`,
+    );
+  }
+
+  if (project.resourceDemand === "High") {
+    items.push("Resource demand is High.");
+  }
+
+  return items.slice(0, 3);
+}
+
+function getSponsorDecision(project) {
+  const signals = calculateProjectDecisionSignals(project);
+
+  if (project.projectStatus === "Critical" || signals.criticalRisk) {
+    return "Confirm the recovery plan and executive escalation path.";
+  }
+
+  if (signals.costInefficient && signals.scheduleInefficient) {
+    return "Review recovery actions and validate the latest forecast.";
+  }
+
+  if (signals.forecastOverBudget) {
+    return "Review remaining cost exposure and funding tolerance.";
+  }
+
+  if (signals.highRisk) {
+    return "Confirm the response plan for current risk exposure.";
+  }
+
+  return "No immediate sponsor intervention is indicated.";
+}
+
+function renderSponsorAttention(container, project) {
+  const signals = getSponsorAttentionSignals(project);
+  const summary = document.createElement("p");
+  const signalList = document.createElement("div");
+  const decision = document.createElement("article");
+  const decisionLabel = document.createElement("span");
+  const decisionText = document.createElement("p");
+
+  container.className =
+    "sf-stakeholder-section-content sf-sponsor-attention";
+  summary.className = "sf-exec-management-summary";
+  signalList.className = "sf-sponsor-signal-list";
+  decision.className = "sf-sponsor-decision-card";
+  decisionLabel.className = "sf-exec-kpi-label";
+  decisionLabel.textContent = "Sponsor Focus";
+  decisionText.textContent = getSponsorDecision(project);
+
+  summary.textContent =
+    signals.length > 0
+      ? `${getProjectName(project)} has ${signals.length} current sponsor attention ${signals.length === 1 ? "signal" : "signals"}.`
+      : `${getProjectName(project)} is not currently showing sponsor-level pressure signals.`;
+
+  if (signals.length === 0) {
+    const empty = document.createElement("p");
+
+    empty.className = "sf-stakeholder-placeholder";
+    empty.textContent =
+      "No sponsor attention signals are currently flagged.";
+    signalList.append(empty);
+  } else {
+    signals.forEach((signal) => {
+      const item = document.createElement("article");
+
+      item.className = "sf-sponsor-signal";
+      item.textContent = signal;
+      signalList.append(item);
+    });
+  }
+
+  decision.append(
+    decisionLabel,
+    decisionText,
+  );
+
+  container.replaceChildren(
+    summary,
+    signalList,
+    decision,
+  );
+}
+
+function createSponsorContextItem(labelText, valueText) {
+  const item = document.createElement("div");
+  const label = document.createElement("dt");
+  const value = document.createElement("dd");
+
+  item.className = "sf-sponsor-context-item";
+  label.textContent = labelText;
+  value.textContent = valueText;
+  item.append(
+    label,
+    value,
+  );
+
+  return item;
+}
+
+function renderSponsorSupportingDetail(container, project) {
+  const context = document.createElement("dl");
+
+  container.className =
+    "sf-stakeholder-section-content sf-sponsor-context";
+  context.className = "sf-sponsor-context-grid";
+  context.append(
+    createSponsorContextItem(
+      "Project Manager",
+      project.projectManager ?? "—",
+    ),
+    createSponsorContextItem(
+      "Project Type",
+      project.projectType ?? "—",
+    ),
+    createSponsorContextItem(
+      "Strategic Priority",
+      project.strategicPriority ?? "—",
+    ),
+    createSponsorContextItem(
+      "Resource Demand",
+      project.resourceDemand ?? "—",
+    ),
+    createSponsorContextItem(
+      "Start Date",
+      formatProjectDate(project.startDate),
+    ),
+    createSponsorContextItem(
+      "End Date",
+      formatProjectDate(project.endDate),
+    ),
+    createSponsorContextItem(
+      "BAC",
+      formatMaybeCurrency(project.budgetBAC),
+    ),
+    createSponsorContextItem(
+      "Percent Complete",
+      formatMaybePercent(project.percentComplete),
+    ),
+  );
+
+  container.replaceChildren(context);
+}
+
+function renderSponsorDashboard(container, projects) {
+  const sections = container.querySelectorAll(
+    ".sf-stakeholder-card",
+  );
+  const project = getSelectedSponsorProject(projects);
+  const renderers = [
+    renderSponsorKeySignals,
+    renderSponsorPerformance,
+    renderSponsorAttention,
+    renderSponsorSupportingDetail,
+  ];
+
+  sections.forEach((section, index) => {
+    const content = section.querySelector(
+      ".sf-stakeholder-section-content",
+    );
+
+    section.classList.remove("sf-stakeholder-card--executive");
+    section.classList.add("sf-stakeholder-card--sponsor");
+
+    if (!project) {
+      createSponsorEmptyState(content);
+      return;
+    }
+
+    renderers[index]?.(content, project);
+  });
+}
+
 function renderExecutiveDashboard(container, projects) {
   const sections = container.querySelectorAll(
     ".sf-stakeholder-card",
@@ -809,6 +1491,7 @@ function renderExecutiveDashboard(container, projects) {
     );
 
     section.classList.add("sf-stakeholder-card--executive");
+    section.classList.remove("sf-stakeholder-card--sponsor");
     renderers[index]?.(content, projects);
   });
 }
@@ -825,6 +1508,7 @@ function renderPlaceholderDashboard(container, selectedAudience) {
     const placeholder = document.createElement("p");
 
     section.classList.remove("sf-stakeholder-card--executive");
+    section.classList.remove("sf-stakeholder-card--sponsor");
     content.className = "sf-stakeholder-section-content";
     placeholder.className = "sf-stakeholder-placeholder";
     placeholder.textContent =
@@ -845,6 +1529,11 @@ function updateStakeholderView(container) {
   const descriptor = container.querySelector(
     ".sf-stakeholder-audience-copy",
   );
+  const existingSponsorControl = container.querySelector(
+    ".sf-sponsor-project-control",
+  );
+
+  existingSponsorControl?.remove();
 
   buttons.forEach((button) => {
     const isSelected =
@@ -858,7 +1547,12 @@ function updateStakeholderView(container) {
   });
 
   if (label) {
-    label.hidden = selectedAudience.key !== "executive";
+    label.hidden =
+      !["executive", "sponsor"].includes(selectedAudience.key);
+    label.textContent =
+      selectedAudience.key === "sponsor"
+        ? "SPONSOR PROJECT BRIEF"
+        : "Executive Portfolio Brief";
   }
 
   if (descriptor) {
@@ -867,6 +1561,16 @@ function updateStakeholderView(container) {
 
   if (selectedAudience.key === "executive") {
     renderExecutiveDashboard(container, currentProjects);
+  } else if (selectedAudience.key === "sponsor") {
+    const descriptorWrapper = descriptor?.parentElement;
+
+    if (descriptorWrapper && currentProjects.length > 0) {
+      descriptorWrapper.after(
+        createSponsorProjectSelector(currentProjects),
+      );
+    }
+
+    renderSponsorDashboard(container, currentProjects);
   } else {
     renderPlaceholderDashboard(container, selectedAudience);
   }
