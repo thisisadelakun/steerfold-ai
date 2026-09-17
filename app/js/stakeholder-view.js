@@ -75,27 +75,9 @@ const STATUS_SEGMENTS = [
   },
 ];
 
-const PRIORITY_SEGMENTS = [
-  {
-    key: "High",
-    label: "High",
-    className: "sf-exec-priority--high",
-  },
-  {
-    key: "Medium",
-    label: "Medium",
-    className: "sf-exec-priority--medium",
-  },
-  {
-    key: "Low",
-    label: "Low",
-    className: "sf-exec-priority--low",
-  },
-];
-
 let selectedAudienceKey = "executive";
 let currentProjects = [];
-let selectedSponsorProjectId = null;
+let selectedStakeholderProjectId = null;
 
 function getSelectedAudience() {
   return (
@@ -243,9 +225,11 @@ function getProjectName(project) {
 }
 
 function getStatusModifier(status) {
-  return String(status ?? "")
+  const modifier = String(status ?? "")
     .toLowerCase()
     .replace(/\s+/g, "-");
+
+  return modifier || "unknown";
 }
 
 function getSponsorDefaultProject(projects) {
@@ -260,9 +244,9 @@ function getSponsorDefaultProject(projects) {
   return projects[0] ?? null;
 }
 
-function getSelectedSponsorProject(projects) {
+function getSelectedStakeholderProject(projects) {
   const rememberedProject = projects.find((project) => {
-    return project.projectId === selectedSponsorProjectId;
+    return project.projectId === selectedStakeholderProjectId;
   });
 
   if (rememberedProject) {
@@ -270,23 +254,23 @@ function getSelectedSponsorProject(projects) {
   }
 
   const defaultProject = getSponsorDefaultProject(projects);
-  selectedSponsorProjectId = defaultProject?.projectId ?? null;
+  selectedStakeholderProjectId = defaultProject?.projectId ?? null;
 
   return defaultProject;
 }
 
-function createSponsorProjectSelector(projects) {
+function createStakeholderProjectSelector(projects) {
   const control = document.createElement("div");
   const label = document.createElement("label");
   const select = document.createElement("select");
-  const selectedProject = getSelectedSponsorProject(projects);
-  const selectId = "stakeholder-sponsor-project";
+  const selectedProject = getSelectedStakeholderProject(projects);
+  const selectId = "stakeholder-project";
 
-  control.className = "sf-sponsor-project-control";
+  control.className = "sf-stakeholder-project-control";
   label.setAttribute("for", selectId);
   label.textContent = "Project";
   select.id = selectId;
-  select.className = "sf-sponsor-project-select";
+  select.className = "sf-stakeholder-project-select";
 
   projects.forEach((project) => {
     const option = document.createElement("option");
@@ -301,12 +285,12 @@ function createSponsorProjectSelector(projects) {
   }
 
   select.addEventListener("change", () => {
-    selectedSponsorProjectId = select.value;
+    selectedStakeholderProjectId = select.value;
     const view = select.closest(".sf-stakeholder-view");
 
     if (view) {
       updateStakeholderView(view);
-      view.querySelector(".sf-sponsor-project-select")?.focus();
+      view.querySelector(".sf-stakeholder-project-select")?.focus();
     }
   });
 
@@ -879,59 +863,283 @@ function renderExecutiveAttention(container, projects) {
   );
 }
 
-function getPrioritySummary(projects) {
-  const counts = {
-    High: 0,
-    Medium: 0,
-    Low: 0,
-  };
+function parseProjectDateValue(value) {
+  const stringValue = String(value ?? "").trim();
+  const isoMatch = stringValue.match(
+    /^(\d{4})-(\d{2})-(\d{2})$/,
+  );
+  const slashMatch = stringValue.match(
+    /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/,
+  );
+  let year;
+  let month;
+  let day;
 
-  projects.forEach((project) => {
-    if (Object.hasOwn(counts, project.strategicPriority)) {
-      counts[project.strategicPriority] += 1;
-    }
+  if (isoMatch) {
+    [, year, month, day] = isoMatch.map(Number);
+  } else if (slashMatch) {
+    [, month, day, year] = slashMatch.map(Number);
+  } else {
+    return null;
+  }
+
+  const date = new Date(year, month - 1, day);
+
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return null;
+  }
+
+  return {
+    date,
+    time: Date.UTC(year, month - 1, day),
+  };
+}
+
+function getTimelineProjects(projects) {
+  return projects.map((project) => {
+    const start = parseProjectDateValue(project.startDate);
+    const end = parseProjectDateValue(project.endDate);
+    const hasUsableSchedule =
+      start !== null &&
+      end !== null &&
+      end.time >= start.time;
+
+    return {
+      project,
+      start,
+      end,
+      hasUsableSchedule,
+    };
+  });
+}
+
+function getTimelineRange(timelineProjects) {
+  const scheduledProjects = timelineProjects.filter((item) => {
+    return item.hasUsableSchedule;
   });
 
-  return counts;
+  if (scheduledProjects.length === 0) {
+    return null;
+  }
+
+  return scheduledProjects.reduce(
+    (range, item) => {
+      return {
+        start:
+          item.start.time < range.start.time
+            ? item.start
+            : range.start,
+        end:
+          item.end.time > range.end.time
+            ? item.end
+            : range.end,
+      };
+    },
+    {
+      start: scheduledProjects[0].start,
+      end: scheduledProjects[0].end,
+    },
+  );
+}
+
+function getTimelineMonths(range) {
+  const months = [];
+  const cursor = new Date(
+    range.start.date.getFullYear(),
+    range.start.date.getMonth(),
+    1,
+  );
+  const endMonth = new Date(
+    range.end.date.getFullYear(),
+    range.end.date.getMonth(),
+    1,
+  );
+
+  while (cursor <= endMonth) {
+    months.push({
+      label: new Intl.DateTimeFormat(
+        APP_CONFIG.portfolio.locale,
+        {
+          month: "short",
+        },
+      ).format(cursor),
+      time: Date.UTC(
+        cursor.getFullYear(),
+        cursor.getMonth(),
+        1,
+      ),
+    });
+    cursor.setMonth(cursor.getMonth() + 1);
+  }
+
+  return months;
+}
+
+function getTimelinePosition(time, range) {
+  const total = Math.max(
+    range.end.time - range.start.time,
+    1,
+  );
+
+  return clamp(
+    ((time - range.start.time) / total) * 100,
+    0,
+    100,
+  );
+}
+
+function createTimelineMonths(range) {
+  const axis = document.createElement("div");
+  const year = document.createElement("span");
+  const monthGrid = document.createElement("div");
+
+  axis.className = "sf-exec-timeline-axis";
+  year.className = "sf-exec-timeline-year";
+  year.textContent =
+    range.start.date.getFullYear() === range.end.date.getFullYear()
+      ? String(range.start.date.getFullYear())
+      : `${range.start.date.getFullYear()}–${range.end.date.getFullYear()}`;
+  monthGrid.className = "sf-exec-timeline-months";
+
+  getTimelineMonths(range).forEach((month) => {
+    const marker = document.createElement("span");
+    const position = getTimelinePosition(month.time, range);
+
+    marker.className = "sf-exec-timeline-month";
+    marker.style.left = `${position}%`;
+    marker.textContent = month.label;
+    monthGrid.append(marker);
+  });
+
+  axis.append(
+    year,
+    monthGrid,
+  );
+
+  return axis;
+}
+
+function createTimelineRow(item, range) {
+  const project = item.project;
+  const row = document.createElement("article");
+  const projectInfo = document.createElement("div");
+  const name = document.createElement("strong");
+  const priority = document.createElement("span");
+  const track = document.createElement("div");
+  const bar = document.createElement("span");
+  const status = document.createElement("span");
+  const complete = document.createElement("span");
+  const percent = formatMaybePercent(project.percentComplete);
+  const startDate = formatProjectDate(project.startDate);
+  const endDate = formatProjectDate(project.endDate);
+  const statusText = project.projectStatus ?? "—";
+  const priorityText = project.strategicPriority ?? "—";
+
+  row.className = "sf-exec-timeline-row";
+  projectInfo.className = "sf-exec-timeline-project";
+  name.textContent = getProjectName(project);
+  priority.className = "sf-exec-timeline-priority";
+  priority.textContent = priorityText;
+  track.className = "sf-exec-timeline-track";
+  complete.className = "sf-exec-timeline-complete";
+  complete.textContent = percent;
+  status.className =
+    `sf-exec-timeline-status sf-exec-timeline-status--${getStatusModifier(project.projectStatus)}`;
+  status.textContent = statusText;
+
+  row.setAttribute(
+    "aria-label",
+    `${getProjectName(project)}: ${startDate} to ${endDate}, status ${statusText}, ${percent} complete.`,
+  );
+
+  if (item.hasUsableSchedule) {
+    const left = getTimelinePosition(item.start.time, range);
+    const right = getTimelinePosition(item.end.time, range);
+    const width = Math.max(right - left, 1.5);
+
+    bar.className =
+      `sf-exec-timeline-bar sf-exec-timeline-bar--${getStatusModifier(project.projectStatus)}`;
+    bar.style.left = `${left}%`;
+    bar.style.width = `${width}%`;
+    bar.title =
+      `${getProjectName(project)}: ${startDate} to ${endDate}`;
+  } else {
+    bar.className = "sf-exec-timeline-unavailable";
+    bar.textContent = "Schedule unavailable";
+  }
+
+  projectInfo.append(
+    name,
+    priority,
+  );
+  track.append(bar);
+  row.append(
+    projectInfo,
+    track,
+    status,
+    complete,
+  );
+
+  return row;
 }
 
 function renderExecutiveSupportingDetail(container, projects) {
-  const counts = getPrioritySummary(projects);
-  const total = projects.length;
-  const highCount = counts.High;
-  const mix = createRingChart({
-    title: "Strategic Portfolio Mix",
-    total,
-    segments: PRIORITY_SEGMENTS.map((segment) => ({
-      ...segment,
-      value: counts[segment.key],
-    })),
-    className: "sf-exec-priority-ring",
-  });
-  const details = document.createElement("div");
+  const timelineProjects = getTimelineProjects(projects);
+  const range = getTimelineRange(timelineProjects);
+  const header = document.createElement("div");
   const heading = document.createElement("h3");
-  const summary = document.createElement("p");
-  const legend = mix.querySelector(".sf-exec-ring-legend");
+  const description = document.createElement("p");
+  const timeline = document.createElement("div");
+  const rows = document.createElement("div");
 
   container.className =
     "sf-stakeholder-section-content sf-exec-supporting";
-  details.className = "sf-exec-supporting-detail";
-  heading.textContent = "Strategic Priority Mix";
-  summary.className = "sf-exec-mix-summary";
-  summary.textContent =
-    `${highCount} of ${total} projects are currently classified as High priority.`;
+  header.className = "sf-exec-timeline-header";
+  heading.textContent = "Portfolio Delivery Timeline";
+  description.textContent =
+    "Planned delivery windows across the current project portfolio.";
+  rows.className = "sf-exec-timeline-rows";
 
-  details.append(heading);
+  header.append(
+    heading,
+    description,
+  );
 
-  if (legend) {
-    details.append(legend);
+  if (!range) {
+    const empty = document.createElement("p");
+
+    empty.className = "sf-stakeholder-placeholder";
+    empty.textContent =
+      "No portfolio schedule data is currently available.";
+    container.replaceChildren(
+      header,
+      empty,
+    );
+    return;
   }
 
-  details.append(summary);
+  timeline.className = "sf-exec-timeline";
+  timeline.setAttribute(
+    "aria-label",
+    `Portfolio Delivery Timeline from ${formatProjectDate(projects.find((project) => parseProjectDateValue(project.startDate)?.time === range.start.time)?.startDate)} to ${formatProjectDate(projects.find((project) => parseProjectDateValue(project.endDate)?.time === range.end.time)?.endDate)}.`,
+  );
+
+  timelineProjects.forEach((item) => {
+    rows.append(createTimelineRow(item, range));
+  });
+
+  timeline.append(
+    createTimelineMonths(range),
+    rows,
+  );
 
   container.replaceChildren(
-    mix,
-    details,
+    header,
+    timeline,
   );
 }
 
@@ -1175,97 +1383,130 @@ function getSponsorForecastLanguage(vac) {
     return `Forecast is ${formatCurrency(Math.abs(vac))} over approved budget.`;
   }
 
+  if (vac === 0) {
+    return "Forecast is aligned with approved budget.";
+  }
+
   return "Forecast remains within approved budget.";
 }
 
 function createSponsorFinancialForecast(project) {
   const evm = calculateProjectEvm(project);
   const forecast = calculateProjectForecast(project);
-  const rows = [
-    {
-      label: "BAC",
-      value: evm.bac,
-      className: "sf-exec-bar--accent",
-    },
-    {
-      label: "AC",
-      value: evm.ac,
-      className: "sf-exec-bar--accent",
-    },
-    {
-      label: "EAC",
-      value: forecast.eac,
-      className:
-        Number.isFinite(forecast.vac) && forecast.vac < 0
-          ? "sf-exec-bar--danger"
-          : "sf-exec-bar--success",
-    },
-    {
-      label: "ETC",
-      value: forecast.etc,
-      className: "sf-exec-bar--accent",
-    },
-    {
-      label: "VAC",
-      value: forecast.vac,
-      className:
-        Number.isFinite(forecast.vac) && forecast.vac < 0
-          ? "sf-exec-bar--danger"
-          : "sf-exec-bar--success",
-    },
-  ];
-  const values = rows
-    .map((row) => row.value)
-    .filter(Number.isFinite);
-  const maxValue = Math.max(
-    ...values.map((value) => Math.abs(value)),
-    1,
-  );
+  const rawUtilization = forecast.eac / evm.bac * 100;
+  const utilization =
+    Number.isFinite(evm.bac) && evm.bac > 0 &&
+    Number.isFinite(forecast.eac) && forecast.eac >= 0 &&
+    Number.isFinite(rawUtilization)
+      ? rawUtilization
+      : null;
+  const scaleMaximum = utilization === null
+    ? 150
+    : Math.max(150, Math.ceil(utilization / 25) * 25);
+  const state = utilization === null
+    ? "unavailable"
+    : utilization > 100
+      ? "over"
+      : utilization >= 98
+        ? "near"
+        : "under";
+  const stateLabel = {
+    unavailable: "Forecast unavailable",
+    over: "Over approved budget",
+    near: "At approved budget",
+    under: "Within approved budget",
+  }[state];
+  const percentText = utilization === null
+    ? "\u2014"
+    : `${new Intl.NumberFormat(APP_CONFIG.portfolio.locale, {
+        maximumFractionDigits: 0,
+      }).format(utilization)}%`;
   const wrapper = document.createElement("div");
   const heading = document.createElement("h3");
-  const rowList = document.createElement("div");
+  const layout = document.createElement("div");
+  const gauge = document.createElement("figure");
+  const svg = createSvgElement("svg");
+  const track = createSvgElement("path");
+  const progress = createSvgElement("path");
+  const marker = createSvgElement("line");
+  const reading = document.createElement("div");
+  const percent = document.createElement("strong");
+  const metricLabel = document.createElement("span");
+  const stateText = document.createElement("span");
+  const axis = document.createElement("div");
+  const minimum = document.createElement("span");
+  const threshold = document.createElement("span");
+  const maximum = document.createElement("span");
+  const details = document.createElement("dl");
   const outlook = document.createElement("p");
+  const markerAngle = Math.PI * (1 - 100 / scaleMaximum);
+  const markerX = 140 + 120 * Math.cos(markerAngle);
+  const markerY = 140 - 120 * Math.sin(markerAngle);
+  const markerInnerX = 140 + 106 * Math.cos(markerAngle);
+  const markerInnerY = 140 - 106 * Math.sin(markerAngle);
 
   wrapper.className = "sf-sponsor-financial-forecast";
   heading.textContent = "Financial Forecast";
-  rowList.className = "sf-exec-financial-bars";
+  layout.className = "sf-sponsor-forecast-layout";
+  gauge.className = `sf-sponsor-gauge sf-sponsor-gauge--${state}`;
+  gauge.setAttribute("role", "img");
+  gauge.setAttribute(
+    "aria-label",
+    `Forecast budget utilization for ${getProjectName(project)}: ${utilization === null ? "unavailable" : `${percentText} of approved budget`}. BAC ${formatMaybeCurrency(evm.bac)}. EAC ${formatMaybeCurrency(forecast.eac)}. VAC ${formatMaybeCurrency(forecast.vac)}. ${stateLabel}.`,
+  );
+  svg.setAttribute("viewBox", "0 0 280 155");
+  svg.setAttribute("aria-hidden", "true");
+  track.classList.add("sf-sponsor-gauge-track");
+  progress.classList.add("sf-sponsor-gauge-progress");
+  marker.classList.add("sf-sponsor-gauge-marker");
+  [track, progress].forEach((arc) => {
+    arc.setAttribute("d", "M 20 140 A 120 120 0 0 1 260 140");
+    arc.setAttribute("pathLength", "100");
+  });
+  progress.setAttribute(
+    "stroke-dasharray",
+    `${utilization === null ? 0 : utilization / scaleMaximum * 100} 100`,
+  );
+  marker.setAttribute("x1", String(markerInnerX));
+  marker.setAttribute("y1", String(markerInnerY));
+  marker.setAttribute("x2", String(markerX));
+  marker.setAttribute("y2", String(markerY));
+  svg.append(track, progress, marker);
+  percent.textContent = percentText;
+  metricLabel.textContent = "Forecast Budget Utilization";
+  stateText.className = "sf-sponsor-gauge-state";
+  stateText.textContent = stateLabel;
+  reading.className = "sf-sponsor-gauge-reading";
+  reading.append(percent, metricLabel, stateText);
+  axis.className = "sf-sponsor-gauge-axis";
+  minimum.textContent = "0%";
+  threshold.textContent = "100% Approved Budget";
+  threshold.className = "sf-sponsor-gauge-threshold";
+  maximum.textContent = `${scaleMaximum}%`;
+  axis.append(minimum, threshold, maximum);
+  gauge.append(svg, reading, axis);
+  details.className = "sf-sponsor-forecast-details";
   outlook.className = "sf-exec-outlook-note";
-  outlook.textContent = getSponsorForecastLanguage(forecast.vac);
+  outlook.textContent = utilization === null
+    ? "Forecast budget comparison is unavailable."
+    : getSponsorForecastLanguage(forecast.vac);
 
-  rows.forEach((row) => {
-    const item = document.createElement("div");
-    const label = document.createElement("span");
-    const value = document.createElement("strong");
-    const track = document.createElement("span");
-    const bar = document.createElement("span");
-    const numericValue =
-      Number.isFinite(row.value) ? row.value : null;
-    const width =
-      numericValue === null
-        ? 0
-        : Math.max(4, Math.abs(numericValue) / maxValue * 100);
+  [
+    ["Approved Budget (BAC)", evm.bac],
+    ["Forecast Cost (EAC)", forecast.eac],
+    ["Remaining Forecast (ETC)", forecast.etc],
+    ["Forecast Variance (VAC)", forecast.vac],
+  ].forEach(([label, value]) => {
+    const term = document.createElement("dt");
+    const description = document.createElement("dd");
 
-    item.className = "sf-exec-financial-row";
-    label.textContent = row.label;
-    value.textContent = formatMaybeCurrency(numericValue);
-    track.className = "sf-exec-bar-track";
-    bar.className = `sf-exec-bar ${row.className}`;
-    bar.style.width = `${width}%`;
-
-    track.append(bar);
-    item.append(
-      label,
-      value,
-      track,
-    );
-    rowList.append(item);
+    term.textContent = label;
+    description.textContent = formatMaybeCurrency(value);
+    details.append(term, description);
   });
 
-  wrapper.append(
-    heading,
-    rowList,
-    outlook,
-  );
+  layout.append(gauge, details);
+  wrapper.append(heading, layout, outlook);
 
   return wrapper;
 }
@@ -1449,7 +1690,7 @@ function renderSponsorDashboard(container, projects) {
   const sections = container.querySelectorAll(
     ".sf-stakeholder-card",
   );
-  const project = getSelectedSponsorProject(projects);
+  const project = getSelectedStakeholderProject(projects);
   const renderers = [
     renderSponsorKeySignals,
     renderSponsorPerformance,
@@ -1461,12 +1702,528 @@ function renderSponsorDashboard(container, projects) {
     const content = section.querySelector(
       ".sf-stakeholder-section-content",
     );
+    const heading = section.querySelector("h2");
 
     section.classList.remove("sf-stakeholder-card--executive");
     section.classList.add("sf-stakeholder-card--sponsor");
+    section.classList.remove("sf-stakeholder-card--team");
+
+    if (heading) {
+      heading.textContent = DASHBOARD_SECTIONS[index];
+    }
 
     if (!project) {
       createSponsorEmptyState(content);
+      return;
+    }
+
+    renderers[index]?.(content, project);
+  });
+}
+
+function createTeamEmptyState(container) {
+  const empty = document.createElement("p");
+
+  container.className =
+    "sf-stakeholder-section-content";
+  empty.className = "sf-stakeholder-placeholder";
+  empty.textContent =
+    "No project data is currently available for Team View.";
+  container.replaceChildren(empty);
+}
+
+function renderTeamKeySignals(container, project) {
+  const evm = calculateProjectEvm(project);
+  const progress = document.createElement("span");
+
+  progress.className = "sf-exec-performance-pair";
+  progress.textContent =
+    formatMaybePercent(project.percentComplete);
+
+  container.className =
+    "sf-stakeholder-section-content sf-team-kpi-grid";
+  container.replaceChildren(
+    createKpiCard({
+      label: "Delivery Progress",
+      value: progress,
+      support:
+        `EV ${formatMaybeCurrency(evm.ev)} / BAC ${formatMaybeCurrency(evm.bac)}`,
+    }),
+    createKpiCard({
+      label: "Cost Efficiency",
+      value: formatMaybeIndex(evm.cpi),
+      support: `CV ${formatMaybeCurrency(evm.cv)}`,
+      className: getPerformanceClass(evm.cpi),
+    }),
+    createKpiCard({
+      label: "Schedule Efficiency",
+      value: formatMaybeIndex(evm.spi),
+      support: `SV ${formatMaybeCurrency(evm.sv)}`,
+      className: getPerformanceClass(evm.spi),
+    }),
+    createKpiCard({
+      label: "Delivery Pressure",
+      value: project.projectStatus ?? "—",
+      support:
+        `Risk ${formatMaybeRiskScore(project.riskScore)} · ${project.resourceDemand ?? "—"} resource demand`,
+      className: getNeedsAttentionClass({
+        critical: project.projectStatus === "Critical" ? 1 : 0,
+        atRisk: project.projectStatus === "At Risk" ? 1 : 0,
+      }),
+    }),
+  );
+}
+
+function getTeamEarnedValueLanguage(evm) {
+  if (
+    Number.isFinite(evm.ev) &&
+    Number.isFinite(evm.pv) &&
+    evm.ev < evm.pv
+  ) {
+    return `Earned value is trailing planned value by ${formatCurrency(evm.pv - evm.ev)}.`;
+  }
+
+  if (
+    Number.isFinite(evm.ev) &&
+    Number.isFinite(evm.pv) &&
+    evm.ev > evm.pv
+  ) {
+    return `Earned value is ahead of planned value by ${formatCurrency(evm.ev - evm.pv)}.`;
+  }
+
+  if (
+    !Number.isFinite(evm.ev) ||
+    !Number.isFinite(evm.pv) ||
+    !Number.isFinite(evm.ac)
+  ) {
+    return "Earned value comparison is unavailable.";
+  }
+
+  if (
+    Number.isFinite(evm.ac) &&
+    Number.isFinite(evm.ev) &&
+    evm.ac > evm.ev
+  ) {
+    return `Actual cost exceeds earned value by ${formatCurrency(evm.ac - evm.ev)}.`;
+  }
+
+  return "Earned value, planned value and actual cost are currently aligned.";
+}
+
+function createTeamEarnedValueSnapshot(project) {
+  const evm = calculateProjectEvm(project);
+  const rows = [
+    {
+      label: "Planned Value (PV)",
+      shortLabel: "PV",
+      value: evm.pv,
+      className: "sf-team-evm-column--planned",
+    },
+    {
+      label: "Earned Value (EV)",
+      shortLabel: "EV",
+      value: evm.ev,
+      className: "sf-team-evm-column--earned",
+    },
+    {
+      label: "Actual Cost (AC)",
+      shortLabel: "AC",
+      value: evm.ac,
+      className: "sf-team-evm-column--actual",
+    },
+  ];
+  const validValues = rows
+    .map((row) => row.value)
+    .filter(Number.isFinite);
+  const maxValue = Math.max(
+    ...validValues.map((value) => Math.abs(value) * 1.12),
+    1,
+  );
+  const wrapper = document.createElement("div");
+  const heading = document.createElement("h3");
+  const figure = document.createElement("figure");
+  const chart = document.createElement("div");
+  const note = document.createElement("p");
+
+  wrapper.className = "sf-team-earned-value";
+  heading.textContent = "Earned Value Snapshot";
+  figure.className = "sf-team-evm-figure";
+  figure.setAttribute("role", "img");
+  figure.setAttribute(
+    "aria-label",
+    `Earned value comparison for ${getProjectName(project)}: Planned Value ${formatMaybeCurrency(evm.pv)}, Earned Value ${formatMaybeCurrency(evm.ev)}, Actual Cost ${formatMaybeCurrency(evm.ac)}.`,
+  );
+  chart.className = "sf-team-evm-columns";
+  note.className = "sf-exec-outlook-note";
+  note.textContent = getTeamEarnedValueLanguage(evm);
+
+  rows.forEach((row) => {
+    const item = document.createElement("div");
+    const value = document.createElement("strong");
+    const barWrap = document.createElement("div");
+    const bar = document.createElement("span");
+    const label = document.createElement("span");
+    const numericValue =
+      Number.isFinite(row.value) ? row.value : null;
+    const height =
+      numericValue === null
+        ? 0
+        : Math.max(5, Math.abs(numericValue) / maxValue * 100);
+
+    item.className = "sf-team-evm-column";
+    value.textContent = formatMaybeCurrency(numericValue);
+    barWrap.className = "sf-team-evm-column-track";
+    bar.className = `sf-team-evm-column-bar ${row.className}`;
+    bar.style.height = `${height}%`;
+    bar.setAttribute(
+      "aria-label",
+      `${row.label}: ${formatMaybeCurrency(numericValue)}`,
+    );
+    label.className = "sf-team-evm-column-label";
+    label.textContent = row.shortLabel;
+    label.title = row.label;
+
+    barWrap.append(bar);
+    item.append(
+      value,
+      barWrap,
+      label,
+    );
+    chart.append(item);
+  });
+
+  figure.append(chart);
+
+  wrapper.append(
+    heading,
+    figure,
+    note,
+  );
+
+  return wrapper;
+}
+
+function getTeamHealthLanguage(project) {
+  const signals = calculateProjectDecisionSignals(project);
+
+  if (signals.costInefficient && signals.scheduleInefficient) {
+    return "Cost and schedule performance both require attention.";
+  }
+
+  if (signals.scheduleInefficient) {
+    return "Schedule performance requires attention.";
+  }
+
+  if (signals.costInefficient) {
+    return "Cost performance requires attention.";
+  }
+
+  if (signals.highRisk) {
+    return "Risk exposure requires attention.";
+  }
+
+  if (project.resourceDemand === "High") {
+    return "Resource demand requires active monitoring.";
+  }
+
+  return "Delivery performance is currently stable.";
+}
+
+function createTeamHealthMetric(labelText, valueText) {
+  const item = document.createElement("div");
+  const label = document.createElement("dt");
+  const value = document.createElement("dd");
+
+  item.className = "sf-team-health-metric";
+  label.textContent = labelText;
+  value.textContent = valueText;
+  item.append(
+    label,
+    value,
+  );
+
+  return item;
+}
+
+function createTeamDeliveryHealth(project) {
+  const evm = calculateProjectEvm(project);
+  const wrapper = document.createElement("div");
+  const heading = document.createElement("h3");
+  const metrics = document.createElement("dl");
+  const note = document.createElement("p");
+
+  wrapper.className = "sf-team-delivery-health";
+  heading.textContent = "Delivery Health";
+  metrics.className = "sf-team-health-list";
+  note.className = "sf-exec-outlook-note";
+  note.textContent = getTeamHealthLanguage(project);
+
+  metrics.append(
+    createTeamHealthMetric(
+      "Cost performance",
+      `CPI ${formatMaybeIndex(evm.cpi)}`,
+    ),
+    createTeamHealthMetric(
+      "Schedule performance",
+      `SPI ${formatMaybeIndex(evm.spi)}`,
+    ),
+    createTeamHealthMetric(
+      "Risk exposure",
+      formatMaybeRiskScore(project.riskScore),
+    ),
+    createTeamHealthMetric(
+      "Resource demand",
+      project.resourceDemand ?? "—",
+    ),
+    createTeamHealthMetric(
+      "Status",
+      project.projectStatus ?? "—",
+    ),
+  );
+
+  wrapper.append(
+    heading,
+    metrics,
+    note,
+  );
+
+  return wrapper;
+}
+
+function renderTeamPerformance(container, project) {
+  container.className =
+    "sf-stakeholder-section-content sf-team-performance-grid";
+  container.replaceChildren(
+    createTeamEarnedValueSnapshot(project),
+    createTeamDeliveryHealth(project),
+  );
+}
+
+function getTeamAttentionSignals(project) {
+  const signals = calculateProjectDecisionSignals(project);
+  const evm = calculateProjectEvm(project);
+  const forecast = calculateProjectForecast(project);
+  const items = [];
+  let hasCostSignal = false;
+
+  if (Number.isFinite(evm.cv) && evm.cv < 0) {
+    items.push(`Cost variance is ${formatCurrency(evm.cv)}.`);
+    hasCostSignal = true;
+  } else if (signals.costInefficient) {
+    items.push(
+      `CPI ${formatMaybeIndex(signals.cpi)} indicates cost efficiency below target.`,
+    );
+    hasCostSignal = true;
+  }
+
+  if (Number.isFinite(evm.sv) && evm.sv < 0) {
+    items.push(`Schedule variance is ${formatCurrency(evm.sv)}.`);
+  } else if (signals.scheduleInefficient) {
+    items.push(
+      `SPI ${formatMaybeIndex(signals.spi)} indicates schedule efficiency below target.`,
+    );
+  }
+
+  if (signals.highRisk) {
+    items.push(`Risk exposure is ${formatMaybeRiskScore(project.riskScore)}.`);
+  }
+
+  if (project.resourceDemand === "High") {
+    items.push("Resource demand is High.");
+  }
+
+  if (
+    items.length < 4 &&
+    (project.projectStatus === "Critical" ||
+      project.projectStatus === "At Risk")
+  ) {
+    items.push(`Project status is ${project.projectStatus}.`);
+  }
+
+  if (
+    items.length < 4 &&
+    !hasCostSignal &&
+    Number.isFinite(forecast.vac) &&
+    forecast.vac < 0
+  ) {
+    items.push(
+      `Forecast pressure is ${formatCurrency(Math.abs(forecast.vac))} over approved budget.`,
+    );
+  }
+
+  return items.slice(0, 4);
+}
+
+function getNextTeamFocus(project) {
+  const signals = calculateProjectDecisionSignals(project);
+
+  if (project.projectStatus === "Critical") {
+    return "Prioritize recovery actions and escalate unresolved delivery pressure.";
+  }
+
+  if (signals.costInefficient && signals.scheduleInefficient) {
+    return "Focus on restoring cost and schedule performance against the approved plan.";
+  }
+
+  if (signals.scheduleInefficient) {
+    return "Review near-term delivery priorities and actions affecting schedule performance.";
+  }
+
+  if (signals.costInefficient) {
+    return "Review current spending against earned progress and remaining budget.";
+  }
+
+  if (signals.highRisk) {
+    return "Review active risk responses and confirm near-term mitigation priorities.";
+  }
+
+  if (project.resourceDemand === "High") {
+    return "Review workload priorities against current resource demand.";
+  }
+
+  return "Maintain current delivery pace and continue monitoring performance.";
+}
+
+function renderTeamAttention(container, project) {
+  const signals = getTeamAttentionSignals(project);
+  const summary = document.createElement("p");
+  const signalList = document.createElement("div");
+  const focus = document.createElement("article");
+  const focusLabel = document.createElement("span");
+  const focusText = document.createElement("p");
+
+  container.className =
+    "sf-stakeholder-section-content sf-team-attention";
+  summary.className = "sf-exec-management-summary";
+  signalList.className = "sf-team-signal-list";
+  focus.className = "sf-team-focus-card";
+  focusLabel.className = "sf-exec-kpi-label";
+  focusLabel.textContent = "Next Team Focus";
+  focusText.textContent = getNextTeamFocus(project);
+
+  summary.textContent =
+    signals.length > 0
+      ? `${getProjectName(project)} has ${signals.length} current delivery ${signals.length === 1 ? "signal" : "signals"} for team attention.`
+      : `${getProjectName(project)} is not currently showing delivery pressure signals.`;
+
+  if (signals.length === 0) {
+    const empty = document.createElement("p");
+
+    empty.className = "sf-stakeholder-placeholder";
+    empty.textContent =
+      "No team attention signals are currently flagged.";
+    signalList.append(empty);
+  } else {
+    signals.forEach((signal) => {
+      const item = document.createElement("article");
+
+      item.className = "sf-team-signal";
+      item.textContent = signal;
+      signalList.append(item);
+    });
+  }
+
+  focus.append(
+    focusLabel,
+    focusText,
+  );
+
+  container.replaceChildren(
+    summary,
+    signalList,
+    focus,
+  );
+}
+
+function createTeamContextItem(labelText, valueText) {
+  const item = document.createElement("div");
+  const label = document.createElement("dt");
+  const value = document.createElement("dd");
+
+  item.className = "sf-team-context-item";
+  label.textContent = labelText;
+  value.textContent = valueText;
+  item.append(
+    label,
+    value,
+  );
+
+  return item;
+}
+
+function renderTeamSupportingDetail(container, project) {
+  const context = document.createElement("dl");
+
+  container.className =
+    "sf-stakeholder-section-content sf-team-context";
+  context.className = "sf-team-context-grid";
+  context.append(
+    createTeamContextItem(
+      "Project Manager",
+      project.projectManager ?? "—",
+    ),
+    createTeamContextItem(
+      "Project Type",
+      project.projectType ?? "—",
+    ),
+    createTeamContextItem(
+      "Strategic Priority",
+      project.strategicPriority ?? "—",
+    ),
+    createTeamContextItem(
+      "Status",
+      project.projectStatus ?? "—",
+    ),
+    createTeamContextItem(
+      "Resource Demand",
+      project.resourceDemand ?? "—",
+    ),
+    createTeamContextItem(
+      "Start Date",
+      formatProjectDate(project.startDate),
+    ),
+    createTeamContextItem(
+      "End Date",
+      formatProjectDate(project.endDate),
+    ),
+    createTeamContextItem(
+      "BAC",
+      formatMaybeCurrency(project.budgetBAC),
+    ),
+  );
+
+  container.replaceChildren(context);
+}
+
+function renderTeamDashboard(container, projects) {
+  const sections = container.querySelectorAll(
+    ".sf-stakeholder-card",
+  );
+  const project = getSelectedStakeholderProject(projects);
+  const renderers = [
+    renderTeamKeySignals,
+    renderTeamPerformance,
+    renderTeamAttention,
+    renderTeamSupportingDetail,
+  ];
+
+  sections.forEach((section, index) => {
+    const content = section.querySelector(
+      ".sf-stakeholder-section-content",
+    );
+    const heading = section.querySelector("h2");
+
+    section.classList.remove("sf-stakeholder-card--executive");
+    section.classList.remove("sf-stakeholder-card--sponsor");
+    section.classList.add("sf-stakeholder-card--team");
+
+    if (heading) {
+      heading.textContent =
+        index === 3 ? "Delivery Context" : DASHBOARD_SECTIONS[index];
+    }
+
+    if (!project) {
+      createTeamEmptyState(content);
       return;
     }
 
@@ -1489,9 +2246,16 @@ function renderExecutiveDashboard(container, projects) {
     const content = section.querySelector(
       ".sf-stakeholder-section-content",
     );
+    const heading = section.querySelector("h2");
 
     section.classList.add("sf-stakeholder-card--executive");
     section.classList.remove("sf-stakeholder-card--sponsor");
+    section.classList.remove("sf-stakeholder-card--team");
+
+    if (heading) {
+      heading.textContent = DASHBOARD_SECTIONS[index];
+    }
+
     renderers[index]?.(content, projects);
   });
 }
@@ -1505,10 +2269,17 @@ function renderPlaceholderDashboard(container, selectedAudience) {
     const content = section.querySelector(
       ".sf-stakeholder-section-content",
     );
+    const heading = section.querySelector("h2");
     const placeholder = document.createElement("p");
 
     section.classList.remove("sf-stakeholder-card--executive");
     section.classList.remove("sf-stakeholder-card--sponsor");
+    section.classList.remove("sf-stakeholder-card--team");
+
+    if (heading) {
+      heading.textContent = DASHBOARD_SECTIONS[index];
+    }
+
     content.className = "sf-stakeholder-section-content";
     placeholder.className = "sf-stakeholder-placeholder";
     placeholder.textContent =
@@ -1530,7 +2301,7 @@ function updateStakeholderView(container) {
     ".sf-stakeholder-audience-copy",
   );
   const existingSponsorControl = container.querySelector(
-    ".sf-sponsor-project-control",
+    ".sf-stakeholder-project-control",
   );
 
   existingSponsorControl?.remove();
@@ -1548,11 +2319,15 @@ function updateStakeholderView(container) {
 
   if (label) {
     label.hidden =
-      !["executive", "sponsor"].includes(selectedAudience.key);
-    label.textContent =
-      selectedAudience.key === "sponsor"
-        ? "SPONSOR PROJECT BRIEF"
-        : "Executive Portfolio Brief";
+      !["executive", "sponsor", "team"].includes(selectedAudience.key);
+
+    if (selectedAudience.key === "sponsor") {
+      label.textContent = "SPONSOR PROJECT BRIEF";
+    } else if (selectedAudience.key === "team") {
+      label.textContent = "DELIVERY TEAM BRIEF";
+    } else {
+      label.textContent = "Executive Portfolio Brief";
+    }
   }
 
   if (descriptor) {
@@ -1561,16 +2336,23 @@ function updateStakeholderView(container) {
 
   if (selectedAudience.key === "executive") {
     renderExecutiveDashboard(container, currentProjects);
-  } else if (selectedAudience.key === "sponsor") {
+  } else if (
+    selectedAudience.key === "sponsor" ||
+    selectedAudience.key === "team"
+  ) {
     const descriptorWrapper = descriptor?.parentElement;
 
     if (descriptorWrapper && currentProjects.length > 0) {
       descriptorWrapper.after(
-        createSponsorProjectSelector(currentProjects),
+        createStakeholderProjectSelector(currentProjects),
       );
     }
 
-    renderSponsorDashboard(container, currentProjects);
+    if (selectedAudience.key === "sponsor") {
+      renderSponsorDashboard(container, currentProjects);
+    } else {
+      renderTeamDashboard(container, currentProjects);
+    }
   } else {
     renderPlaceholderDashboard(container, selectedAudience);
   }
