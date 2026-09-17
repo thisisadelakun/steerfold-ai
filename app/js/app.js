@@ -70,6 +70,8 @@ import { initOnboardingTour } from "./onboarding-tour.js";
 
 import { renderStakeholderView } from "./stakeholder-view.js";
 
+import { renderScenarioAnalysis } from "./scenario-analysis.js";
+
 import { openProjectForm } from "./project-form.js";
 
 import { openConfirmDialog } from "./confirm-dialog.js";
@@ -303,6 +305,10 @@ const SteerfoldApp = {
 
     this.projectForecastAnalysis = document.querySelector(
       "[data-project-forecast-analysis]",
+    );
+
+    this.scenarioAnalysis = document.querySelector(
+      "[data-scenario-analysis]",
     );
 
     this.decisionSupportView = document.querySelector(
@@ -1121,6 +1127,7 @@ const SteerfoldApp = {
       this.renderForecastingKpis(projects);
       this.renderPortfolioForecast(projects);
       this.renderProjectForecastAnalysis(projects);
+      renderScenarioAnalysis(this.scenarioAnalysis, projects);
       this.renderDecisionSupportKpis(projects);
       this.renderPriorityRecommendations(projects);
       this.renderDecisionFactors(projects);
