@@ -268,7 +268,11 @@ function createComparison(current, scenario) {
   return comparison;
 }
 
-export function renderScenarioAnalysis(container, projects) {
+export function renderScenarioAnalysis(
+  container,
+  projects,
+  { onProjectChange } = {},
+) {
   if (!container) {
     return;
   }
@@ -278,6 +282,7 @@ export function renderScenarioAnalysis(container, projects) {
     empty.className = "sf-scenario-empty";
     empty.textContent = "No project data is currently available for scenario analysis.";
     container.replaceChildren(empty);
+    if (typeof onProjectChange === "function") onProjectChange(null);
     return;
   }
 
@@ -426,6 +431,9 @@ export function renderScenarioAnalysis(container, projects) {
     selectedProject = projects.find((project) => project.projectId === selector.value)
       || projects[0];
     loadSelectedProject();
+    if (typeof onProjectChange === "function") {
+      onProjectChange(selectedProject);
+    }
   });
   reset.addEventListener("click", loadSelectedProject);
   projectField.append(projectLabel, selector);
@@ -433,4 +441,7 @@ export function renderScenarioAnalysis(container, projects) {
   workspace.append(controls, note, inputs, results, impact);
   container.replaceChildren(workspace);
   loadSelectedProject();
+  if (typeof onProjectChange === "function") {
+    onProjectChange(selectedProject);
+  }
 }

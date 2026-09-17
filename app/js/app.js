@@ -72,6 +72,8 @@ import { renderStakeholderView } from "./stakeholder-view.js";
 
 import { renderScenarioAnalysis } from "./scenario-analysis.js";
 
+import { renderSensitivityAnalysis } from "./sensitivity-analysis.js";
+
 import { openProjectForm } from "./project-form.js";
 
 import { openConfirmDialog } from "./confirm-dialog.js";
@@ -309,6 +311,10 @@ const SteerfoldApp = {
 
     this.scenarioAnalysis = document.querySelector(
       "[data-scenario-analysis]",
+    );
+
+    this.sensitivityAnalysis = document.querySelector(
+      "[data-sensitivity-analysis]",
     );
 
     this.decisionSupportView = document.querySelector(
@@ -1127,7 +1133,11 @@ const SteerfoldApp = {
       this.renderForecastingKpis(projects);
       this.renderPortfolioForecast(projects);
       this.renderProjectForecastAnalysis(projects);
-      renderScenarioAnalysis(this.scenarioAnalysis, projects);
+      renderScenarioAnalysis(this.scenarioAnalysis, projects, {
+        onProjectChange: (project) => {
+          renderSensitivityAnalysis(this.sensitivityAnalysis, project);
+        },
+      });
       this.renderDecisionSupportKpis(projects);
       this.renderPriorityRecommendations(projects);
       this.renderDecisionFactors(projects);
