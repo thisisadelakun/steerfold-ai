@@ -54,6 +54,7 @@ import {
   pushBudgetRoute,
   pushForecastingRoute,
   pushDecisionSupportRoute,
+  pushGovernanceRoute,
   pushStakeholderViewRoute,
   listenForRouteChanges,
 } from "./router.js";
@@ -73,6 +74,7 @@ import { renderStakeholderView } from "./stakeholder-view.js";
 import { renderScenarioAnalysis } from "./scenario-analysis.js";
 
 import { renderSensitivityAnalysis } from "./sensitivity-analysis.js";
+import { renderGovernanceView } from "./governance-view.js";
 
 import { openProjectForm } from "./project-form.js";
 
@@ -273,6 +275,7 @@ const SteerfoldApp = {
     this.pageSupportingLine = document.querySelector(
       "[data-page-supporting-line]",
     );
+    this.governanceBadge = document.querySelector("[data-governance-badge]");
     this.currencyIndicator = document.querySelector(
       "[data-currency-indicator]",
     );
@@ -324,6 +327,7 @@ const SteerfoldApp = {
     this.stakeholderView = document.querySelector(
       "[data-stakeholder-view]",
     );
+    this.governanceView = document.querySelector("[data-governance-view]");
 
     this.decisionSupportKpiContainer = document.querySelector(
       "[data-decision-support-kpis]",
@@ -542,6 +546,7 @@ const SteerfoldApp = {
   },
 
   setDefaultPageHeaderContext() {
+    if (this.governanceBadge) this.governanceBadge.hidden = true;
     if (this.pageEyebrow) {
       this.pageEyebrow.textContent =
         "AI-Enabled Project Portfolio Intelligence";
@@ -554,6 +559,7 @@ const SteerfoldApp = {
   },
 
   setStakeholderPageHeaderContext() {
+    if (this.governanceBadge) this.governanceBadge.hidden = true;
     if (this.pageEyebrow) {
       this.pageEyebrow.textContent =
         "PRESENTATION & STAKEHOLDER INTELLIGENCE";
@@ -1141,6 +1147,7 @@ const SteerfoldApp = {
       this.renderDecisionSupportKpis(projects);
       this.renderPriorityRecommendations(projects);
       this.renderDecisionFactors(projects);
+      renderGovernanceView(this.governanceView, projects);
       this.applyFilters();
       this.renderRouteFromUrl();
     } catch (error) {
@@ -1531,6 +1538,10 @@ const SteerfoldApp = {
 renderRouteFromUrl() {
   const route = getCurrentRoute();
 
+  if (this.governanceView) {
+    this.governanceView.hidden = route.view !== "governance";
+  }
+
   if (route.view === "project") {
     this.showProjectDetail(route.projectId);
     return;
@@ -1560,6 +1571,11 @@ renderRouteFromUrl() {
   if (route.view === "decision-support") {
     this.showDecisionSupportView();
 
+    return;
+  }
+
+  if (route.view === "governance") {
+    this.showGovernanceView();
     return;
   }
 
@@ -1609,6 +1625,7 @@ showPortfolioView({
   activeArea = "Portfolio",
   focusProjects = false,
 } = {}) {
+    if (this.governanceView) this.governanceView.hidden = true;
     this.setDefaultPageHeaderContext();
 
     this.state.currentProjectId = null;
@@ -1668,6 +1685,7 @@ showPortfolioView({
   },
 
   showProjectDetail(projectId) {
+    if (this.governanceView) this.governanceView.hidden = true;
     this.setDefaultPageHeaderContext();
 
     const project =
@@ -1732,6 +1750,7 @@ showPortfolioView({
   },
 
 showBudgetView() {
+  if (this.governanceView) this.governanceView.hidden = true;
   this.setDefaultPageHeaderContext();
 
   this.state.currentProjectId = null;
@@ -1773,6 +1792,7 @@ showBudgetView() {
 },
 
 showForecastingView() {
+  if (this.governanceView) this.governanceView.hidden = true;
   this.setDefaultPageHeaderContext();
 
   this.state.currentProjectId = null;
@@ -1814,6 +1834,7 @@ showForecastingView() {
 },
 
 showDecisionSupportView() {
+  if (this.governanceView) this.governanceView.hidden = true;
   this.setDefaultPageHeaderContext();
 
   this.state.currentProjectId = null;
@@ -1854,7 +1875,31 @@ showDecisionSupportView() {
   this.setNavigationArea("Decision Support");
 },
 
+showGovernanceView() {
+  this.state.currentProjectId = null;
+  this.setDefaultPageHeaderContext();
+  this.governanceBadge.hidden = false;
+  this.pageEyebrow.textContent = "BUDGET CONTROL & GOVERNANCE";
+  this.pageTitle.textContent = "Budget Governance";
+  this.pageSubtitle.textContent =
+    "Assess proposed budget changes before they affect the approved baseline.";
+  this.pageSupportingLine.textContent =
+    "Review financial impact, governance requirements and baseline implications without modifying project records.";
+  this.pageSupportingLine.hidden = false;
+  this.setPortfolioContextVisibility(false);
+  this.portfolioOverviewViews.forEach((view) => { view.hidden = true; });
+  this.projectsViews.forEach((view) => { view.hidden = true; });
+  this.projectDetail.hidden = true;
+  this.budgetView.hidden = true;
+  this.forecastingView.hidden = true;
+  this.decisionSupportView.hidden = true;
+  this.stakeholderView.hidden = true;
+  this.governanceView.hidden = false;
+  this.setNavigationArea("Governance");
+},
+
 showStakeholderView() {
+  if (this.governanceView) this.governanceView.hidden = true;
   this.state.currentProjectId = null;
 
   this.setStakeholderPageHeaderContext();
@@ -2810,6 +2855,10 @@ renderProjectDetail(project) {
     } else if (target === "stakeholder") {
       event.preventDefault();
       pushStakeholderViewRoute();
+      this.renderRouteFromUrl();
+    } else if (target === "governance") {
+      event.preventDefault();
+      pushGovernanceRoute();
       this.renderRouteFromUrl();
     }
 

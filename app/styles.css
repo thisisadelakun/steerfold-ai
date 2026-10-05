@@ -210,6 +210,10 @@ select {
   display: block;
 }
 
+.sf-nav-link--governance .sf-nav-icon {
+  display: block;
+}
+
 .sf-nav-label {
   min-width: 0;
   overflow: hidden;
@@ -271,12 +275,34 @@ select {
   display: none;
 }
 
+.sf-app-shell.sf-sidebar-collapsed .sf-nav-link--governance {
+  display: flex !important;
+}
+
 .sf-app-shell.sf-sidebar-collapsed
   .sf-nav-link--stakeholder {
   justify-content: center;
   width: 40px;
   padding-right: 0;
   padding-left: 0;
+}
+
+.sf-app-shell.sf-sidebar-collapsed .sf-nav-link--governance {
+  justify-content: center;
+  width: 40px;
+  padding-right: 0;
+  padding-left: 0;
+}
+
+.sf-app-shell.sf-sidebar-collapsed .sf-nav-link--governance .sf-nav-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .sf-app-shell.sf-sidebar-collapsed
@@ -6103,6 +6129,314 @@ select {
    EXPORT AND PRINT
    ========================================================= */
 
+.sf-governance-view {
+  display: grid;
+  gap: 22px;
+  min-width: 0;
+}
+
+.sf-governance-view > section,
+.sf-governance-top-grid > section,
+.sf-governance-financial-grid > section {
+  min-width: 0;
+}
+
+.sf-governance-toolbar {
+  display: flex;
+  align-items: end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.sf-governance-field {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.sf-governance-toolbar .sf-governance-field {
+  width: min(400px, 100%);
+}
+
+.sf-governance-field label,
+.sf-governance-impact-field label {
+  color: var(--sf-text-secondary);
+  font-size: 0.84rem;
+  font-weight: 650;
+}
+
+.sf-governance-control {
+  width: 100%;
+  min-width: 0;
+  min-height: 42px;
+  padding: 9px 12px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary);
+  font: inherit;
+}
+
+.sf-governance-control:focus-visible,
+.sf-governance-reset:focus-visible {
+  outline: 2px solid var(--sf-accent);
+  outline-offset: 2px;
+}
+
+.sf-governance-control[aria-invalid="true"] {
+  border-color: var(--sf-danger);
+}
+
+.sf-governance-badge {
+  display: inline-block;
+  margin-top: 12px;
+  padding: 5px 9px;
+  border: 1px solid var(--sf-accent);
+  border-radius: var(--sf-radius-sm);
+  color: var(--sf-accent);
+  font-size: 0.72rem;
+  font-weight: 750;
+  text-transform: uppercase;
+}
+
+.sf-governance-eyebrow {
+  margin: 0 0 5px;
+  color: var(--sf-accent);
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.sf-governance-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.sf-governance-kpis .sf-kpi-value {
+  overflow-wrap: anywhere;
+  font-size: 1.55rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-governance-kpis small,
+.sf-governance-field small,
+.sf-governance-counts,
+.sf-governance-empty {
+  color: var(--sf-text-secondary);
+}
+
+.sf-governance-top-grid,
+.sf-governance-financial-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.sf-governance-form,
+.sf-governance-impacts,
+.sf-governance-financial-grid,
+[data-gov-downstream] {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+
+.sf-governance-form textarea {
+  resize: vertical;
+}
+
+.sf-governance-reset {
+  justify-self: start;
+  min-height: 40px;
+  padding: 8px 14px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sf-governance-reset:hover {
+  border-color: var(--sf-accent);
+}
+
+.sf-governance-error {
+  margin: 0;
+  color: var(--sf-danger);
+  font-size: 0.85rem;
+}
+
+.sf-governance-impacts {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sf-governance-impact-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.sf-governance-impact-help,
+.sf-governance-impact-guidance {
+  color: var(--sf-text-secondary);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.sf-governance-counts {
+  margin: 12px 0 0;
+  font-size: 0.84rem;
+}
+
+.sf-governance-facts {
+  display: grid;
+  gap: 0;
+  margin: 0;
+}
+
+.sf-governance-facts > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 5px 16px;
+  padding: 11px 0;
+  border-bottom: 1px solid var(--sf-border);
+}
+
+.sf-governance-facts dt {
+  color: var(--sf-text-secondary);
+}
+
+.sf-governance-facts dd {
+  margin: 0;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-governance-facts .sf-governance-emphasis dd {
+  color: var(--sf-accent);
+}
+
+.sf-governance-interpretation {
+  margin: 16px 0 0;
+  color: var(--sf-text-secondary);
+}
+
+.sf-governance-bridge {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+.sf-governance-bridge-row {
+  display: grid;
+  grid-template-columns: minmax(155px, 220px) minmax(0, 1fr) minmax(95px, 145px);
+  align-items: center;
+  gap: 16px;
+  min-width: 0;
+  font-size: 0.88rem;
+}
+
+.sf-governance-bridge-row strong {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.sf-governance-bridge-track {
+  position: relative;
+  height: 24px;
+  background: var(--sf-surface-elevated);
+}
+
+.sf-governance-bridge-bar {
+  position: absolute;
+  top: 3px;
+  bottom: 3px;
+  background: var(--sf-accent);
+}
+
+.sf-governance-bridge-bar--positive {
+  background: var(--sf-success);
+}
+
+.sf-governance-bridge-bar--negative {
+  background: var(--sf-danger);
+}
+
+.sf-governance-bridge-bar--forecast {
+  background: var(--sf-warning);
+}
+
+.sf-governance-path {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+  padding-left: 22px;
+}
+
+.sf-governance-path li,
+.sf-governance-roles > div {
+  min-width: 0;
+  padding: 12px;
+  border-left: 2px solid var(--sf-border);
+}
+
+.sf-governance-path strong,
+.sf-governance-path span,
+.sf-governance-roles strong,
+.sf-governance-roles span {
+  display: block;
+}
+
+.sf-governance-path span,
+.sf-governance-roles span {
+  margin-top: 5px;
+  color: var(--sf-text-secondary);
+  font-size: 0.84rem;
+}
+
+.sf-governance-roles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.sf-governance-readiness-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding-left: 20px;
+}
+
+@media (max-width: 1080px) {
+  .sf-governance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-governance-path,
+  .sf-governance-roles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
+@media (max-width: 720px) {
+  .sf-governance-top-grid,
+  .sf-governance-financial-grid,
+  .sf-governance-path,
+  .sf-governance-roles { grid-template-columns: 1fr; }
+  .sf-governance-bridge-row { grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; }
+  .sf-governance-bridge-track { grid-column: 1 / -1; grid-row: 2; }
+  .sf-governance-bridge-row strong { grid-column: 2; grid-row: 1; }
+}
+
+@media (max-width: 480px) {
+  .sf-governance-kpis,
+  .sf-governance-impacts { grid-template-columns: 1fr; }
+}
+
 @media print {
   *,
   *::before,
@@ -6141,6 +6475,7 @@ select {
   .sf-confirm-overlay,
   .sf-project-create-button,
   .sf-project-detail-actions,
+  .sf-governance-reset,
   .sf-table-controls,
   .sf-project-pagination,
   .sf-analysis-control {

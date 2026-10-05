@@ -41,6 +41,10 @@ export function getCurrentRoute() {
     };
   }
 
+  if (url.hash === "#governance") {
+    return { view: "governance", projectId: null };
+  }
+
   if (url.hash === "#stakeholder-view") {
     return {
       view: "stakeholder-view",
@@ -151,6 +155,13 @@ export function pushDecisionSupportRoute() {
     "",
     buildRelativeUrl(url),
   );
+}
+
+export function pushGovernanceRoute() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("project");
+  url.hash = "governance";
+  history.pushState({ view: "governance" }, "", buildRelativeUrl(url));
 }
 
 export function pushStakeholderViewRoute() {
