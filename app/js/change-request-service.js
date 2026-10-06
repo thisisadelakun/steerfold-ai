@@ -5,6 +5,12 @@ import {
 
 import { getValidAccessToken } from "./auth-service.js";
 
+function nullableNumber(value) {
+  return value === null || value === undefined
+    ? null
+    : Number(value);
+}
+
 function normalizeChangeRequest(row) {
   if (!row) return null;
 
@@ -33,6 +39,11 @@ function normalizeChangeRequest(row) {
     reviewedAt: row.reviewed_at,
     decidedAt: row.decided_at,
     decisionNote: row.decision_note,
+    appliedAt: row.applied_at,
+    appliedBy: row.applied_by,
+    appliedBacBefore: nullableNumber(row.applied_bac_before),
+    appliedBacAfter: nullableNumber(row.applied_bac_after),
+    applicationNote: row.application_note,
   };
 }
 
@@ -235,6 +246,22 @@ export async function transitionChangeRequestStatus(
       p_note: note || null,
     },
     "The change request status could not be updated.",
+  );
+
+  return normalizeChangeRequest(getReturnedRecord(payload));
+}
+
+export async function applyApprovedChangeRequest(
+  changeRequestId,
+  applicationNote = null,
+) {
+  const payload = await callRpc(
+    "apply_approved_change_request",
+    {
+      p_change_request_id: changeRequestId,
+      p_application_note: applicationNote || null,
+    },
+    "The approved budget change could not be applied.",
   );
 
   return normalizeChangeRequest(getReturnedRecord(payload));
