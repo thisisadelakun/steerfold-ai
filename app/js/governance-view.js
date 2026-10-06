@@ -284,8 +284,14 @@ export function renderGovernanceView(container, projects) {
     const empty = document.createElement("p");
     empty.className = "sf-governance-empty";
     empty.textContent = "No project data is currently available for governance analysis.";
-    container.append(empty);
-    return;
+    const workflow = document.createElement("section");
+    workflow.dataset.governanceWorkflow = "";
+    container.append(empty, workflow);
+    return {
+      getAssessment: () => null,
+      loadAssessment: () => false,
+      setProjectLocked: () => {},
+    };
   }
 
   container.innerHTML = `
@@ -324,7 +330,8 @@ export function renderGovernanceView(container, projects) {
       <section class="sf-panel" aria-labelledby="sf-governance-decision-title"><div class="sf-section-header"><div><p class="sf-governance-eyebrow">Decision Readiness</p><h2 id="sf-governance-decision-title">Assessment Summary</h2></div></div><ul class="sf-governance-readiness-list" data-gov-readiness></ul></section>
     </div>
     <section class="sf-panel" aria-labelledby="sf-governance-path-title"><div class="sf-section-header"><div><h2 id="sf-governance-path-title">Expected Governance Path</h2><p>Guidance for a formal request, not a live workflow status.</p></div></div><ol class="sf-governance-path" data-gov-path></ol></section>
-    <section class="sf-panel" aria-labelledby="sf-governance-roles-title"><div class="sf-section-header"><div><h2 id="sf-governance-roles-title">Governance Roles</h2><p>Typical responsibilities; no approval is implied.</p></div></div><div class="sf-governance-roles" data-gov-roles></div></section>`;
+    <section class="sf-panel" aria-labelledby="sf-governance-roles-title"><div class="sf-section-header"><div><h2 id="sf-governance-roles-title">Governance Roles</h2><p>Typical responsibilities; no approval is implied.</p></div></div><div class="sf-governance-roles" data-gov-roles></div></section>
+    <section data-governance-workflow></section>`;
 
   const projectSelect = container.querySelector("[data-gov-project]");
   projects.forEach((project) => {
@@ -356,4 +363,57 @@ export function renderGovernanceView(container, projects) {
   impactControls.forEach((control) => control.addEventListener("change", () => update(container, selected)));
   container.querySelector("[data-gov-reset]").addEventListener("click", reset);
   reset();
+
+  return {
+    getAssessment() {
+      const result = calculateGovernance(selected, amount.value);
+      const impacts = {};
+      impactControls.forEach((control) => {
+        impacts[control.dataset.dimension] = control.value;
+      });
+
+      return {
+        project: selected,
+        result,
+        budgetChangeAmount: result.change,
+        changeType: container.querySelector("[data-gov-type]").value,
+        changeSummary: container.querySelector("[data-gov-summary]").value.trim(),
+        impacts,
+      };
+    },
+
+    loadAssessment(request) {
+      const project = projects.find((item) => {
+        return item.projectId === request.projectCode;
+      });
+
+      if (!project) return false;
+
+      selected = project;
+      projectSelect.value = project.projectId;
+      amount.value = String(request.budgetChangeAmount);
+      container.querySelector("[data-gov-type]").value = request.changeType;
+      container.querySelector("[data-gov-summary]").value = request.changeSummary ?? "";
+
+      const requestImpacts = {
+        Scope: request.impactScope,
+        Schedule: request.impactSchedule,
+        Cost: request.impactCost,
+        Quality: request.impactQuality,
+        Resources: request.impactResources,
+        Risk: request.impactRisk,
+        Stakeholders: request.impactStakeholders,
+      };
+      impactControls.forEach((control) => {
+        control.value = requestImpacts[control.dataset.dimension] ?? "None";
+      });
+      update(container, selected);
+      container.scrollIntoView({ block: "start", behavior: "smooth" });
+      return true;
+    },
+
+    setProjectLocked(isLocked) {
+      projectSelect.disabled = isLocked;
+    },
+  };
 }

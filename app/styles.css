@@ -6416,10 +6416,435 @@ select {
   padding-left: 20px;
 }
 
+.sf-governance-workflow {
+  display: grid;
+  gap: 16px;
+}
+
+.sf-governance-workflow-signin,
+.sf-governance-admin-note,
+.sf-governance-workflow-loading,
+.sf-governance-detail-empty,
+.sf-governance-workflow-empty p,
+.sf-governance-history > p {
+  margin: 0;
+  color: var(--sf-text-secondary);
+}
+
+.sf-governance-admin-note {
+  font-size: 0.8rem;
+}
+
+.sf-governance-workflow-feedback {
+  padding: 10px 12px;
+  border-left: 2px solid var(--sf-accent);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-secondary);
+  font-size: 0.86rem;
+}
+
+.sf-governance-workflow-feedback[data-state="error"] {
+  border-left-color: var(--sf-danger);
+  color: var(--sf-danger);
+}
+
+.sf-governance-workflow-feedback[data-state="success"] {
+  border-left-color: var(--sf-success);
+  color: var(--sf-success);
+}
+
+.sf-governance-workflow-primary,
+.sf-governance-workflow-controls,
+.sf-governance-lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.sf-governance-workflow-primary button,
+.sf-governance-lifecycle-actions button,
+.sf-governance-dialog-actions button {
+  min-height: 40px;
+  padding: 8px 13px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+
+.sf-governance-workflow-primary button:first-child,
+.sf-governance-dialog-confirm {
+  border-color: var(--sf-accent) !important;
+  background: var(--sf-accent) !important;
+  color: var(--sf-bg) !important;
+  font-weight: 700;
+}
+
+.sf-governance-lifecycle-actions button[data-tone="danger"],
+.sf-governance-dialog-danger {
+  border-color: var(--sf-danger) !important;
+  color: var(--sf-danger) !important;
+}
+
+.sf-governance-workflow-primary button:disabled,
+.sf-governance-lifecycle-actions button:disabled,
+.sf-governance-dialog-actions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.52;
+}
+
+.sf-governance-workflow-primary button:focus-visible,
+.sf-governance-lifecycle-actions button:focus-visible,
+.sf-governance-request-row:focus-visible,
+.sf-governance-workflow-controls input:focus-visible,
+.sf-governance-workflow-controls select:focus-visible,
+.sf-governance-dialog button:focus-visible,
+.sf-governance-dialog textarea:focus-visible {
+  outline: 2px solid var(--sf-accent);
+  outline-offset: 2px;
+}
+
+.sf-governance-editing-indicator {
+  color: var(--sf-accent);
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.sf-governance-workflow-controls > div {
+  display: grid;
+  gap: 5px;
+  min-width: min(230px, 100%);
+}
+
+.sf-governance-workflow-controls label,
+.sf-governance-dialog-field label {
+  color: var(--sf-text-secondary);
+  font-size: 0.8rem;
+  font-weight: 650;
+}
+
+.sf-governance-workflow-controls input,
+.sf-governance-workflow-controls select,
+.sf-governance-dialog textarea {
+  width: 100%;
+  min-width: 0;
+  min-height: 40px;
+  padding: 8px 11px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary);
+  font: inherit;
+}
+
+.sf-governance-workflow-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 0.78fr) minmax(0, 1.45fr);
+  gap: 18px;
+  min-width: 0;
+}
+
+.sf-governance-request-list {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.sf-governance-request-row {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  min-width: 0;
+  padding: 13px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.sf-governance-request-row:hover,
+.sf-governance-request-row--selected {
+  border-color: var(--sf-accent);
+}
+
+.sf-governance-request-row:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.sf-governance-request-row-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.sf-governance-request-row-header strong {
+  color: var(--sf-accent);
+}
+
+.sf-governance-request-project,
+.sf-governance-request-financial,
+.sf-governance-request-date {
+  overflow-wrap: anywhere;
+}
+
+.sf-governance-request-financial {
+  font-size: 0.88rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-governance-request-project,
+.sf-governance-request-date {
+  color: var(--sf-text-secondary);
+  font-size: 0.78rem;
+}
+
+.sf-governance-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 25px;
+  padding: 3px 7px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  color: var(--sf-text-secondary);
+  font-size: 0.72rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.sf-governance-status--approved {
+  border-color: var(--sf-success);
+  color: var(--sf-success);
+}
+
+.sf-governance-status--rejected,
+.sf-governance-status--withdrawn {
+  border-color: var(--sf-danger);
+  color: var(--sf-danger);
+}
+
+.sf-governance-status--submitted,
+.sf-governance-status--under-review,
+.sf-governance-status--deferred {
+  border-color: var(--sf-warning);
+  color: var(--sf-warning);
+}
+
+.sf-governance-request-detail {
+  min-width: 0;
+  padding-left: 18px;
+  border-left: 1px solid var(--sf-border);
+}
+
+.sf-governance-detail-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.sf-governance-detail-identity {
+  display: grid;
+  gap: 3px;
+  min-width: 0;
+}
+
+.sf-governance-detail-identity strong {
+  color: var(--sf-accent);
+  font-size: 1.25rem;
+}
+
+.sf-governance-detail-identity span {
+  color: var(--sf-text-secondary);
+  overflow-wrap: anywhere;
+}
+
+.sf-governance-lifecycle-actions {
+  margin-top: 14px;
+}
+
+.sf-governance-detail-facts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 18px;
+  margin: 18px 0 0;
+}
+
+.sf-governance-detail-facts > div {
+  display: grid;
+  grid-template-columns: minmax(110px, 0.8fr) minmax(0, 1.2fr);
+  gap: 10px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--sf-border);
+}
+
+.sf-governance-detail-facts dt {
+  color: var(--sf-text-secondary);
+  font-size: 0.82rem;
+}
+
+.sf-governance-detail-facts dd {
+  min-width: 0;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-size: 0.86rem;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.sf-governance-approved-note {
+  margin-top: 18px;
+  padding: 12px;
+  border-left: 2px solid var(--sf-warning);
+  background: var(--sf-surface-elevated);
+}
+
+.sf-governance-approved-note p {
+  margin: 4px 0 0;
+  color: var(--sf-text-secondary);
+  font-size: 0.84rem;
+}
+
+.sf-governance-history {
+  margin-top: 22px;
+}
+
+.sf-governance-history h3 {
+  margin: 0 0 12px;
+  font-size: 1rem;
+}
+
+.sf-governance-history-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sf-governance-history-list li {
+  display: grid;
+  grid-template-columns: minmax(110px, max-content) minmax(0, 1fr) auto;
+  gap: 8px 14px;
+  padding-left: 12px;
+  border-left: 2px solid var(--sf-border);
+}
+
+.sf-governance-history-list span,
+.sf-governance-history-list time,
+.sf-governance-history-list p {
+  color: var(--sf-text-secondary);
+  font-size: 0.8rem;
+}
+
+.sf-governance-history-list time {
+  text-align: right;
+}
+
+.sf-governance-history-list p {
+  grid-column: 1 / -1;
+  margin: 0;
+}
+
+.sf-governance-workflow-empty {
+  padding: 18px;
+  border: 1px dashed var(--sf-border);
+}
+
+.sf-governance-workflow-empty p {
+  margin-top: 5px;
+}
+
+.sf-governance-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(9, 10, 12, 0.78);
+}
+
+.sf-governance-dialog {
+  display: grid;
+  gap: 14px;
+  width: min(520px, 100%);
+  max-height: calc(100vh - 40px);
+  padding: 22px;
+  overflow-y: auto;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-md);
+  background: var(--sf-surface);
+  box-shadow: 0 20px 55px rgba(0, 0, 0, 0.42);
+}
+
+.sf-governance-dialog h2,
+.sf-governance-dialog p {
+  margin: 0;
+}
+
+.sf-governance-dialog > p {
+  color: var(--sf-text-secondary);
+}
+
+.sf-governance-dialog-details {
+  display: grid;
+  gap: 7px;
+  margin: 0;
+}
+
+.sf-governance-dialog-details > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.sf-governance-dialog-details dt {
+  color: var(--sf-text-secondary);
+}
+
+.sf-governance-dialog-details dd {
+  margin: 0;
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.sf-governance-dialog-field {
+  display: grid;
+  gap: 6px;
+}
+
+.sf-governance-dialog-warning {
+  padding: 10px;
+  border-left: 2px solid var(--sf-warning);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary) !important;
+}
+
+.sf-governance-dialog-error {
+  color: var(--sf-danger) !important;
+}
+
+.sf-governance-dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
 @media (max-width: 1080px) {
   .sf-governance-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .sf-governance-path,
   .sf-governance-roles { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-governance-workflow-layout { grid-template-columns: 1fr; }
+  .sf-governance-request-detail { padding: 18px 0 0; border-top: 1px solid var(--sf-border); border-left: 0; }
 }
 
 @media (max-width: 720px) {
@@ -6430,11 +6855,22 @@ select {
   .sf-governance-bridge-row { grid-template-columns: minmax(0, 1fr) auto; gap: 5px 10px; }
   .sf-governance-bridge-track { grid-column: 1 / -1; grid-row: 2; }
   .sf-governance-bridge-row strong { grid-column: 2; grid-row: 1; }
+  .sf-governance-detail-facts { grid-template-columns: 1fr; }
+  .sf-governance-history-list li { grid-template-columns: 1fr; }
+  .sf-governance-history-list time { text-align: left; }
+  .sf-governance-history-list p { grid-column: 1; }
 }
 
 @media (max-width: 480px) {
   .sf-governance-kpis,
   .sf-governance-impacts { grid-template-columns: 1fr; }
+  .sf-governance-workflow-controls > div,
+  .sf-governance-workflow-primary button,
+  .sf-governance-lifecycle-actions button { width: 100%; }
+  .sf-governance-detail-facts > div { grid-template-columns: 1fr; }
+  .sf-governance-detail-facts dd { text-align: left; }
+  .sf-governance-dialog { padding: 18px; }
+  .sf-governance-dialog-actions button { flex: 1 1 100%; }
 }
 
 @media print {
@@ -6473,12 +6909,20 @@ select {
   .sf-auth-panel,
   .sf-project-form-overlay,
   .sf-confirm-overlay,
+  .sf-governance-dialog-overlay,
   .sf-project-create-button,
   .sf-project-detail-actions,
   .sf-governance-reset,
   .sf-table-controls,
   .sf-project-pagination,
   .sf-analysis-control {
+    display: none !important;
+  }
+
+  .sf-governance-print-hide,
+  .sf-governance-admin-note,
+  .sf-governance-workflow-feedback,
+  .sf-governance-workflow-signin {
     display: none !important;
   }
 

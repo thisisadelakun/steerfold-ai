@@ -75,6 +75,7 @@ import { renderScenarioAnalysis } from "./scenario-analysis.js";
 
 import { renderSensitivityAnalysis } from "./sensitivity-analysis.js";
 import { renderGovernanceView } from "./governance-view.js";
+import { initGovernanceWorkflow } from "./governance-workflow.js";
 
 import { openProjectForm } from "./project-form.js";
 
@@ -1099,6 +1100,7 @@ const SteerfoldApp = {
       "auth:changed",
       () => {
         this.renderProjectsPageActions();
+        this.governanceWorkflow?.handleAuthChange();
 
         const route = getCurrentRoute();
 
@@ -1147,7 +1149,17 @@ const SteerfoldApp = {
       this.renderDecisionSupportKpis(projects);
       this.renderPriorityRecommendations(projects);
       this.renderDecisionFactors(projects);
-      renderGovernanceView(this.governanceView, projects);
+      const governanceAssessment = renderGovernanceView(
+        this.governanceView,
+        projects,
+      );
+      this.governanceWorkflow = initGovernanceWorkflow({
+        container: this.governanceView?.querySelector(
+          "[data-governance-workflow]",
+        ),
+        projects,
+        assessment: governanceAssessment,
+      });
       this.applyFilters();
       this.renderRouteFromUrl();
     } catch (error) {
