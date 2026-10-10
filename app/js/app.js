@@ -244,6 +244,8 @@ const SteerfoldApp = {
 
   portfolioRadarProjectId: null,
 
+  governanceWorkflowRestore: null,
+
     init() {
     document.documentElement.dataset.sfReady = "true";
 
@@ -1153,12 +1155,25 @@ const SteerfoldApp = {
         this.governanceView,
         projects,
       );
+      const governanceRestore = this.governanceWorkflowRestore;
+      this.governanceWorkflowRestore = null;
       this.governanceWorkflow = initGovernanceWorkflow({
         container: this.governanceView?.querySelector(
           "[data-governance-workflow]",
         ),
         projects,
         assessment: governanceAssessment,
+        initialSelectedId: governanceRestore?.requestId ?? null,
+        initialSuccess: governanceRestore?.successMessage ?? "",
+        onProjectDataRefresh: async ({ requestId, successMessage = "" }) => {
+          this.governanceWorkflowRestore = { requestId, successMessage };
+          try {
+            await this.loadDashboard({ allowCsvFallback: false });
+          } catch (error) {
+            this.governanceWorkflowRestore = null;
+            throw error;
+          }
+        },
       });
       this.applyFilters();
       this.renderRouteFromUrl();

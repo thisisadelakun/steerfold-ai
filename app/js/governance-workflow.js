@@ -6,6 +6,7 @@ import {
   createChangeRequest,
   updateDraftChangeRequest,
   transitionChangeRequestStatus,
+  applyApprovedChangeRequest,
   deleteDraftChangeRequest,
   listChangeRequestEvents,
 } from "./change-request-service.js";
@@ -97,8 +98,10 @@ function openWorkflowDialog({
   message,
   details = [],
   noteLabel = null,
+  noteHelper = null,
   warning = null,
   confirmText,
+  pendingText = null,
   danger = false,
   onConfirm,
 }) {
@@ -111,12 +114,14 @@ function openWorkflowDialog({
   const detailList = document.createElement("dl");
   const noteField = document.createElement("div");
   const note = document.createElement("textarea");
+  const noteHelp = document.createElement("small");
   const warningElement = document.createElement("p");
   const error = document.createElement("p");
   const actions = document.createElement("div");
   const cancel = document.createElement("button");
   const confirm = document.createElement("button");
   let pending = false;
+  let closed = false;
   let restoreBackground = () => {};
 
   overlay.className = "sf-governance-dialog-overlay";
@@ -146,7 +151,9 @@ function openWorkflowDialog({
     note.rows = 3;
     label.htmlFor = note.id;
     label.textContent = noteLabel;
-    noteField.append(label, note);
+    noteHelp.textContent = noteHelper || "";
+    noteHelp.hidden = !noteHelper;
+    noteField.append(label, note, noteHelp);
   } else {
     noteField.hidden = true;
   }
@@ -167,7 +174,10 @@ function openWorkflowDialog({
   overlay.append(dialog);
 
   function close() {
+    if (closed) return;
+    closed = true;
     document.removeEventListener("keydown", onKeydown);
+    window.removeEventListener("auth:changed", onAuthChange);
     restoreBackground();
     overlay.remove();
     if (previousFocus?.isConnected) previousFocus.focus();
@@ -178,12 +188,18 @@ function openWorkflowDialog({
     if (event.key === "Escape" && !pending) close();
   }
 
+  function onAuthChange() {
+    if (!isAuthenticated()) close();
+  }
+
   cancel.addEventListener("click", () => { if (!pending) close(); });
   confirm.addEventListener("click", async () => {
     if (pending) return;
     pending = true;
     cancel.disabled = true;
     confirm.disabled = true;
+    const originalConfirmText = confirm.textContent;
+    if (pendingText) confirm.textContent = pendingText;
     error.hidden = true;
     try {
       await onConfirm(note.value.trim() || null);
@@ -191,7 +207,8 @@ function openWorkflowDialog({
     } catch (caught) {
       pending = false;
       cancel.disabled = false;
-      confirm.disabled = false;
+      confirm.disabled = caught?.preventRetry === true;
+      confirm.textContent = originalConfirmText;
       error.textContent = caught?.message ?? "The action could not be completed.";
       error.hidden = false;
     }
@@ -200,6 +217,7 @@ function openWorkflowDialog({
   document.body.append(overlay);
   restoreBackground = makeBackgroundInert(overlay);
   document.addEventListener("keydown", onKeydown);
+  window.addEventListener("auth:changed", onAuthChange);
   requestAnimationFrame(() => (noteLabel ? note : cancel).focus());
 }
 
@@ -219,12 +237,19 @@ function assessmentPayload(assessment) {
   };
 }
 
-export function initGovernanceWorkflow({ container, projects, assessment }) {
+export function initGovernanceWorkflow({
+  container,
+  projects,
+  assessment,
+  onProjectDataRefresh,
+  initialSelectedId = null,
+  initialSuccess = "",
+}) {
   if (!container) return null;
   const state = {
     authenticated: isAuthenticated(),
     requests: [],
-    selectedId: null,
+    selectedId: initialSelectedId,
     events: [],
     search: "",
     status: "All",
@@ -233,7 +258,7 @@ export function initGovernanceWorkflow({ container, projects, assessment }) {
     pending: false,
     editingId: null,
     error: "",
-    success: "",
+    success: initialSuccess,
     authVersion: 0,
   };
 
@@ -242,6 +267,10 @@ export function initGovernanceWorkflow({ container, projects, assessment }) {
     return project?.projectName
       ? `${request.projectCode} · ${project.projectName}`
       : request.projectCode || EMPTY;
+  }
+
+  function requestProject(request) {
+    return projects.find((item) => item.projectId === request.projectCode) ?? null;
   }
 
   function selectedRequest() {
@@ -336,7 +365,9 @@ export function initGovernanceWorkflow({ container, projects, assessment }) {
       const heading = document.createElement("strong");
       const transition = document.createElement("span");
       const date = document.createElement("time");
-      heading.textContent = event.eventType;
+      heading.textContent = event.eventType === "Applied"
+        ? "Baseline Applied"
+        : event.eventType;
       transition.textContent = event.fromStatus && event.toStatus
         ? `${event.fromStatus} → ${event.toStatus}`
         : event.toStatus || "";
@@ -410,6 +441,127 @@ export function initGovernanceWorkflow({ container, projects, assessment }) {
     });
   }
 
+
+  function applicationErrorNeedsRefresh(message) {
+    return message.includes("baseline no longer matches") ||
+      message.includes("already been applied");
+  }
+
+  function openApplyDialog(request) {
+    const project = requestProject(request);
+    const currentBac = Number(project?.budgetBAC);
+
+    openWorkflowDialog({
+      title: "Apply Approved Budget Change",
+      message: "This action will update the project's approved budget baseline. The governance decision is already recorded. This is the separate controlled action that applies the approved budget change.",
+      details: [
+        ["Request ID", request.requestId],
+        ["Project", projectName(request)],
+        ["Current Project BAC", formatMoney(currentBac)],
+        ["Approved Budget Change", formatMoney(request.budgetChangeAmount, { signed: true })],
+        ["New Project BAC", formatMoney(request.proposedBac)],
+      ],
+      noteLabel: "Application Note",
+      noteHelper: "Optional note describing the baseline implementation.",
+      warning: "Proceed only when the approved change is ready to become the active project baseline. This does not change earned value, planned value, actual cost, schedule, risk or completion data.",
+      confirmText: "Apply Budget Baseline",
+      pendingText: "Applying baseline...",
+      onConfirm: async (applicationNote) => {
+        let applied = false;
+        try {
+          await applyApprovedChangeRequest(request.id, applicationNote);
+          applied = true;
+          await onProjectDataRefresh?.({
+            requestId: request.id,
+            successMessage: `${request.requestId} applied to the project budget baseline.`,
+          });
+        } catch (error) {
+          const message = error?.message ?? "The approved budget change could not be applied.";
+
+          if (!applied && applicationErrorNeedsRefresh(message)) {
+            try {
+              await onProjectDataRefresh?.({ requestId: request.id });
+            } catch {
+              // Preserve the authoritative application error.
+            }
+          } else if (applied) {
+            try {
+              await loadRequests(request.id);
+            } catch {
+              // The application succeeded; preserve the refresh error below.
+            }
+            const refreshError = new Error(
+              `${request.requestId} was applied, but the latest project data could not be refreshed.`,
+            );
+            refreshError.preventRetry = true;
+            throw refreshError;
+          }
+
+          throw new Error(message);
+        }
+      },
+    });
+  }
+
+  function renderBaselineApplication(host, request) {
+    if (request.status !== "Approved") return;
+
+    const project = requestProject(request);
+    const currentBac = Number(project?.budgetBAC);
+    const hasCurrentBac = Number.isFinite(currentBac);
+    const hasDrift = hasCurrentBac && currentBac !== request.originalBac;
+    const applied = Boolean(request.appliedAt);
+    const section = document.createElement("section");
+    const heading = document.createElement("div");
+    const title = document.createElement("h3");
+    const stateIndicator = document.createElement("strong");
+    const copy = document.createElement("p");
+    const facts = document.createElement("dl");
+
+    section.className = "sf-governance-baseline-application";
+    heading.className = "sf-governance-baseline-header";
+    title.textContent = "Baseline Application";
+    stateIndicator.className = `sf-governance-application-state sf-governance-application-state--${applied ? "applied" : "pending"}`;
+    stateIndicator.textContent = applied ? "Applied" : "Not Applied";
+    heading.append(title, stateIndicator);
+    copy.textContent = applied
+      ? "The approved budget change has been applied to the project baseline. Governance status remains Approved."
+      : "This Change Request has been approved, but the project budget baseline has not been updated.";
+    facts.className = "sf-governance-application-facts";
+
+    if (applied) {
+      addFact(facts, "Applied At", formatDateTime(request.appliedAt));
+      addFact(facts, "BAC Before", formatMoney(request.appliedBacBefore));
+      addFact(facts, "BAC After", formatMoney(request.appliedBacAfter));
+      addFact(facts, "Application Note", request.applicationNote || EMPTY);
+    } else {
+      addFact(facts, "Current Project BAC", formatMoney(currentBac));
+      addFact(facts, "Approved Budget Change", formatMoney(request.budgetChangeAmount, { signed: true }));
+      addFact(facts, "Approved Proposed BAC", formatMoney(request.proposedBac));
+    }
+
+    section.append(heading, copy, facts);
+
+    if (!applied && hasDrift) {
+      const warning = document.createElement("p");
+      warning.className = "sf-governance-application-warning";
+      warning.textContent = "The project baseline no longer matches the baseline captured when this Change Request was created.";
+      section.append(warning);
+    }
+
+    if (!applied) {
+      const apply = document.createElement("button");
+      apply.type = "button";
+      apply.className = "sf-governance-apply-button sf-governance-print-hide";
+      apply.textContent = "Apply Approved Change";
+      apply.disabled = state.pending || hasDrift || !hasCurrentBac;
+      apply.addEventListener("click", () => openApplyDialog(request));
+      section.append(apply);
+    }
+
+    host.append(section);
+  }
+
   function renderDetail(host) {
     const request = selectedRequest();
     if (!request) {
@@ -455,16 +607,7 @@ export function initGovernanceWorkflow({ container, projects, assessment }) {
     addFact(facts, "Decision Note", request.decisionNote || EMPTY);
     host.append(header, actions, facts);
 
-    if (request.status === "Approved") {
-      const warning = document.createElement("div");
-      warning.className = "sf-governance-approved-note";
-      const strong = document.createElement("strong");
-      const copy = document.createElement("p");
-      strong.textContent = "Governance decision recorded. The project budget baseline has not been updated.";
-      copy.textContent = "Applying an approved budget change is a separate controlled action.";
-      warning.append(strong, copy);
-      host.append(warning);
-    }
+    renderBaselineApplication(host, request);
 
     const history = document.createElement("section");
     history.className = "sf-governance-history";

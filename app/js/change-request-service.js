@@ -76,6 +76,10 @@ function mapRequestInput(data) {
 }
 
 async function getErrorMessage(response, fallbackMessage) {
+  if (response.status === 401) {
+    return "Your authentication session has expired. Sign in again before continuing.";
+  }
+
   try {
     const error = await response.json();
     const serverText = [error?.message, error?.details]
@@ -91,6 +95,25 @@ async function getErrorMessage(response, fallbackMessage) {
       serverText.includes("change_requests_budget_balance")
     ) {
       return "The proposed budget must be greater than 0 and equal the original budget plus the requested change.";
+    }
+
+    if (serverText.includes("Project budget baseline has changed")) {
+      return "Application blocked because the project's current budget baseline no longer matches the baseline captured by this Change Request.";
+    }
+
+    if (serverText.includes("Change Request has already been applied")) {
+      return "This Change Request has already been applied to the project budget baseline.";
+    }
+
+    if (serverText.includes("Only an Approved Change Request can be applied")) {
+      return "Application blocked because this Change Request is no longer Approved.";
+    }
+
+    if (
+      serverText.includes("proposed budget is invalid") ||
+      serverText.includes("budget change amount must be non-zero")
+    ) {
+      return "Application blocked because the approved budget values are no longer valid.";
     }
 
     const details = [
