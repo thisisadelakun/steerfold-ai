@@ -1,6 +1,7 @@
 import { formatCurrency } from "./formatters.js";
 import { APP_CONFIG } from "./app-config.js";
 import { isAuthenticated } from "./auth-service.js";
+import { initGovernanceReporting } from "./governance-reporting.js";
 import {
   listChangeRequests,
   createChangeRequest,
@@ -260,7 +261,21 @@ export function initGovernanceWorkflow({
     error: "",
     success: initialSuccess,
     authVersion: 0,
+    requestsLoaded: false,
   };
+
+  const reporting = initGovernanceReporting({
+    projects,
+    onSelectRequest: async (requestId) => {
+      await selectRequest(requestId);
+      const detail = container.querySelector(".sf-governance-request-detail");
+      if (detail && state.authenticated) {
+        detail.tabIndex = -1;
+        detail.focus();
+        detail.scrollIntoView({ block: "start", behavior: "auto" });
+      }
+    },
+  });
 
   function projectName(request) {
     const project = projects.find((item) => item.projectId === request.projectCode);
@@ -730,6 +745,10 @@ export function initGovernanceWorkflow({
     renderDetail(detail);
     workspace.append(list, detail);
     container.append(controls, workspace);
+    if (state.requestsLoaded) {
+      reporting.update(state.requests, state.selectedId, state.pending);
+      container.append(reporting.element);
+    }
   }
 
   async function loadHistory(requestId, version = state.authVersion) {
@@ -759,6 +778,7 @@ export function initGovernanceWorkflow({
       const requests = await listChangeRequests();
       if (version !== state.authVersion) return;
       state.requests = requests;
+      state.requestsLoaded = true;
       state.selectedId = requests.some((request) => request.id === preferredId)
         ? preferredId
         : requests[0]?.id ?? null;
@@ -771,6 +791,7 @@ export function initGovernanceWorkflow({
     } catch (error) {
       if (version !== state.authVersion) return;
       state.requests = [];
+      state.requestsLoaded = false;
       state.selectedId = null;
       state.events = [];
       state.error = error?.message ?? "Change requests could not be loaded.";
@@ -917,6 +938,8 @@ export function initGovernanceWorkflow({
     state.authVersion += 1;
     state.authenticated = isAuthenticated();
     state.requests = [];
+    state.requestsLoaded = false;
+    reporting.clear();
     state.events = [];
     state.selectedId = null;
     state.editingId = null;
