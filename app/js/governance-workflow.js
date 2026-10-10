@@ -633,6 +633,11 @@ export function initGovernanceWorkflow({
 
   function render() {
     container.replaceChildren();
+    const saveArea = assessment.saveArea;
+    if (saveArea) {
+      saveArea.replaceChildren();
+      saveArea.hidden = !state.authenticated;
+    }
     container.className = "sf-panel sf-governance-workflow";
     container.setAttribute("aria-labelledby", "sf-governance-workflow-title");
     const header = document.createElement("div");
@@ -680,7 +685,22 @@ export function initGovernanceWorkflow({
       cancel.addEventListener("click", cancelEdit);
       primaryActions.append(indicator, cancel);
     }
-    container.append(adminNote, feedback, primaryActions);
+    container.append(adminNote, feedback);
+    if (saveArea) {
+      saveArea.setAttribute("aria-labelledby", "sf-governance-save-title");
+      const copy = document.createElement("div");
+      const title = document.createElement("h2");
+      const description = document.createElement("p");
+      title.id = "sf-governance-save-title";
+      title.textContent = "Save Current Assessment";
+      description.textContent = state.editingId
+        ? "Update the persistent Draft Change Request from the assessment above."
+        : "Create a persistent Draft Change Request from the assessment above.";
+      copy.append(title, description);
+      const nearbyFeedback = feedback.cloneNode(true);
+      nearbyFeedback.removeAttribute("aria-live");
+      saveArea.append(copy, primaryActions, nearbyFeedback);
+    }
 
     if (state.loading) {
       const loading = document.createElement("p");

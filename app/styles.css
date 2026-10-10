@@ -6416,6 +6416,47 @@ select {
   padding-left: 20px;
 }
 
+.sf-governance-assessment-save {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px 20px;
+  min-width: 0;
+  padding: 16px 0;
+  border-top: 1px solid var(--sf-border);
+  border-bottom: 1px solid var(--sf-border);
+}
+
+.sf-governance-assessment-save > div:first-child {
+  flex: 1 1 240px;
+  min-width: 0;
+}
+
+.sf-governance-assessment-save h2 {
+  margin: 0;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+}
+
+.sf-governance-assessment-save p {
+  margin: 5px 0 0;
+  color: var(--sf-text-secondary);
+  font-size: 0.84rem;
+}
+
+.sf-governance-assessment-save .sf-governance-workflow-feedback {
+  flex: 1 1 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 480px) {
+  .sf-governance-assessment-save > .sf-governance-workflow-primary {
+    width: 100%;
+  }
+}
+
 .sf-governance-workflow {
   display: grid;
   gap: 16px;

@@ -286,8 +286,12 @@ export function renderGovernanceView(container, projects) {
     empty.textContent = "No project data is currently available for governance analysis.";
     const workflow = document.createElement("section");
     workflow.dataset.governanceWorkflow = "";
-    container.append(empty, workflow);
+    const saveArea = document.createElement("section");
+    saveArea.className = "sf-governance-assessment-save sf-governance-print-hide";
+    saveArea.hidden = true;
+    container.append(empty, saveArea, workflow);
     return {
+      saveArea,
       getAssessment: () => null,
       loadAssessment: () => false,
       setProjectLocked: () => {},
@@ -317,6 +321,7 @@ export function renderGovernanceView(container, projects) {
       </section>
       <section class="sf-panel" aria-labelledby="sf-governance-impact-title"><div class="sf-section-header"><div><p class="sf-governance-eyebrow">Impact Assessment</p><h2 id="sf-governance-impact-title">Affected Areas</h2><p>Select the observed impact for each dimension. Financial facts are shown separately.</p></div></div><div class="sf-governance-impacts" data-gov-impacts></div><p class="sf-governance-counts" data-gov-impact-counts></p><p class="sf-governance-counts" data-gov-cost-indicator></p></section>
     </div>
+    <section class="sf-governance-assessment-save sf-governance-print-hide" data-gov-save-area hidden></section>
     <div data-gov-downstream>
       <div class="sf-governance-financial-grid">
         <section class="sf-panel" aria-labelledby="sf-governance-proposed-title"><div class="sf-section-header"><div><h2 id="sf-governance-proposed-title">Proposed Baseline</h2><p>Illustrative only; the approved BAC is unchanged.</p></div></div><dl class="sf-governance-facts"><div><dt>Current BAC</dt><dd data-gov-current-bac></dd></div><div><dt>Budget Change</dt><dd data-gov-change></dd></div><div class="sf-governance-emphasis"><dt>Proposed BAC</dt><dd data-gov-proposed></dd></div><div><dt>Absolute Change</dt><dd data-gov-absolute></dd></div><div><dt>Percentage Change</dt><dd data-gov-percent></dd></div></dl></section>
@@ -365,6 +370,7 @@ export function renderGovernanceView(container, projects) {
   reset();
 
   return {
+    saveArea: container.querySelector("[data-gov-save-area]"),
     getAssessment() {
       const result = calculateGovernance(selected, amount.value);
       const impacts = {};

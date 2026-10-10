@@ -86,6 +86,20 @@ async function getErrorMessage(response, fallbackMessage) {
       .filter(Boolean)
       .join(" ");
 
+    const authorizationMessages = [
+      "Requester role is required to create Change Requests.",
+      "Requester role is required for this Change Request action.",
+      "Only the Requester who created this Draft can edit it.",
+      "Only the Requester who created this Change Request can perform this action.",
+      "Reviewer role is required for this Change Request action.",
+      "Approver role is required for this Change Request action.",
+      "Baseline Controller role is required to apply an approved budget change.",
+    ];
+    const authorizationMessage = authorizationMessages.find(
+      (message) => serverText.includes(message),
+    );
+    if (authorizationMessage) return authorizationMessage;
+
     if (error?.code === "23503") {
       return "The selected project is no longer available.";
     }
