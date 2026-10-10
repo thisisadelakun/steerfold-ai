@@ -6476,6 +6476,31 @@ select {
   font-size: 0.8rem;
 }
 
+.sf-governance-permissions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  min-width: 0;
+  color: var(--sf-text-secondary);
+  font-size: 0.8rem;
+  overflow-wrap: anywhere;
+}
+
+.sf-governance-permissions strong { color: var(--sf-text-primary); }
+.sf-governance-permission-note { margin: 0; color: var(--sf-text-secondary); font-size: 0.82rem; }
+.sf-governance-permissions-retry {
+  min-height: 36px;
+  padding: 5px 10px;
+  border: 1px solid var(--sf-border);
+  border-radius: var(--sf-radius-sm);
+  background: var(--sf-surface-elevated);
+  color: var(--sf-text-primary);
+  font: inherit;
+  cursor: pointer;
+}
+.sf-governance-permissions-retry:focus-visible { outline: 2px solid var(--sf-accent); outline-offset: 2px; }
+
 .sf-governance-workflow-feedback {
   padding: 10px 12px;
   border-left: 2px solid var(--sf-accent);

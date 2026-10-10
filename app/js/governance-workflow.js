@@ -1,6 +1,7 @@
 import { formatCurrency } from "./formatters.js";
 import { APP_CONFIG } from "./app-config.js";
-import { isAuthenticated } from "./auth-service.js";
+import { isAuthenticated, getCurrentUser } from "./auth-service.js";
+import { getMyGovernanceRoles } from "./governance-role-service.js";
 import { initGovernanceReporting } from "./governance-reporting.js";
 import {
   listChangeRequests,
@@ -23,6 +24,18 @@ const STATUSES = [
   "Deferred",
   "Withdrawn",
 ];
+
+const ROLE_LABELS = {
+  requester: "Requester",
+  reviewer: "Reviewer",
+  approver: "Approver",
+  baseline_controller: "Baseline Controller",
+  governance_admin: "Governance Admin",
+};
+
+function isAuthorizationError(message) {
+  return /(?:Requester|Reviewer|Approver|Baseline Controller) role is required|Only the Requester who created|Authentication is required|authentication session has expired/i.test(message);
+}
 
 function formatMoney(value, { signed = false } = {}) {
   if (!Number.isFinite(value)) return EMPTY;
@@ -262,7 +275,74 @@ export function initGovernanceWorkflow({
     success: initialSuccess,
     authVersion: 0,
     requestsLoaded: false,
+    userId: getCurrentUser()?.id ?? null,
+    roles: new Set(),
+    rolesStatus: "idle",
+    rolesVersion: 0,
   };
+
+  function hasRole(role) {
+    return state.authenticated && state.rolesStatus === "ready" && state.roles.has(role);
+  }
+
+  function ownsRequest(request) {
+    return Boolean(state.userId && request?.createdBy === state.userId);
+  }
+
+  function owningRequester(request) {
+    return hasRole("requester") && ownsRequest(request);
+  }
+
+  async function loadRoles() {
+    if (!state.authenticated) return;
+    const authVersion = state.authVersion;
+    const rolesVersion = ++state.rolesVersion;
+    state.roles.clear();
+    state.rolesStatus = "loading";
+    render();
+    try {
+      const roles = await getMyGovernanceRoles();
+      if (authVersion !== state.authVersion || rolesVersion !== state.rolesVersion) return;
+      state.roles = new Set(roles.map((assignment) => assignment.role));
+      state.rolesStatus = "ready";
+    } catch {
+      if (authVersion !== state.authVersion || rolesVersion !== state.rolesVersion) return;
+      state.rolesStatus = "error";
+    }
+    if (state.editingId && !owningRequester(selectedRequest())) {
+      state.editingId = null;
+      assessment.setProjectLocked(false);
+    }
+    render();
+  }
+
+  function renderPermissions(host) {
+    const summary = document.createElement("div");
+    const label = document.createElement("strong");
+    const copy = document.createElement("span");
+    summary.className = "sf-governance-permissions sf-governance-print-hide";
+    summary.setAttribute("role", "status");
+    label.textContent = "Your Governance Roles";
+    if (state.rolesStatus === "loading" || state.rolesStatus === "idle") {
+      copy.textContent = "Loading governance permissions...";
+    } else if (state.rolesStatus === "error") {
+      copy.textContent = "Governance permissions could not be loaded.";
+    } else {
+      copy.textContent = Object.entries(ROLE_LABELS)
+        .filter(([role]) => state.roles.has(role))
+        .map(([, name]) => name).join(" \u00b7 ") || "No governance workflow roles assigned.";
+    }
+    summary.append(label, copy);
+    if (state.rolesStatus === "error") {
+      const retry = document.createElement("button");
+      retry.type = "button";
+      retry.className = "sf-governance-permissions-retry";
+      retry.textContent = "Retry permissions";
+      retry.addEventListener("click", loadRoles);
+      summary.append(retry);
+    }
+    host.append(summary);
+  }
 
   const reporting = initGovernanceReporting({
     projects,
@@ -430,19 +510,19 @@ export function initGovernanceWorkflow({
 
   function renderActions(host, request) {
     const actions = [];
-    if (request.status === "Draft") {
+    if (request.status === "Draft" && owningRequester(request)) {
       actions.push(["Load Draft into Assessment", () => editDraft(request)]);
       actions.push(["Submit", () => transitionAction(request, "Submitted", "Submit Request")]);
       actions.push(["Withdraw", () => transitionAction(request, "Withdrawn", "Withdraw Request")]);
       actions.push(["Delete Draft", () => deleteDraft(request), "danger"]);
     } else if (request.status === "Submitted") {
-      actions.push(["Start Review", () => transitionAction(request, "Under Review", "Start Review")]);
-      actions.push(["Withdraw", () => transitionAction(request, "Withdrawn", "Withdraw Request")]);
-    } else if (request.status === "Under Review") {
+      if (hasRole("reviewer")) actions.push(["Start Review", () => transitionAction(request, "Under Review", "Start Review")]);
+      if (owningRequester(request)) actions.push(["Withdraw", () => transitionAction(request, "Withdrawn", "Withdraw Request")]);
+    } else if (request.status === "Under Review" && hasRole("approver")) {
       actions.push(["Approve", () => transitionAction(request, "Approved", "Approve Request")]);
       actions.push(["Reject", () => transitionAction(request, "Rejected", "Reject Request"), "danger"]);
       actions.push(["Defer", () => transitionAction(request, "Deferred", "Defer Request")]);
-    } else if (request.status === "Deferred") {
+    } else if (request.status === "Deferred" && hasRole("reviewer")) {
       actions.push(["Resume Review", () => transitionAction(request, "Under Review", "Resume Review")]);
     }
     actions.forEach(([label, handler, tone]) => {
@@ -454,6 +534,22 @@ export function initGovernanceWorkflow({
       button.addEventListener("click", handler);
       host.append(button);
     });
+    if (!actions.length && state.rolesStatus === "ready") {
+      const messages = {
+        Draft: ownsRequest(request)
+          ? "Requester role is required to modify this Draft."
+          : "You can view this Draft, but only the Requester who created it can modify it.",
+        Submitted: "Reviewer role is required to start review. Only the owning Requester can withdraw this request.",
+        "Under Review": "Approver role is required to record a governance decision.",
+        Deferred: "Reviewer role is required to resume review.",
+      };
+      if (messages[request.status]) {
+        const note = document.createElement("p");
+        note.className = "sf-governance-permission-note";
+        note.textContent = messages[request.status];
+        host.append(note);
+      } else host.hidden = true;
+    } else if (!actions.length) host.hidden = true;
   }
 
 
@@ -482,16 +578,27 @@ export function initGovernanceWorkflow({
       confirmText: "Apply Budget Baseline",
       pendingText: "Applying baseline...",
       onConfirm: async (applicationNote) => {
+        const version = state.authVersion;
         let applied = false;
         try {
           await applyApprovedChangeRequest(request.id, applicationNote);
           applied = true;
+          if (version !== state.authVersion) return;
           await onProjectDataRefresh?.({
             requestId: request.id,
             successMessage: `${request.requestId} applied to the project budget baseline.`,
           });
         } catch (error) {
+          if (version !== state.authVersion) throw error;
           const message = error?.message ?? "The approved budget change could not be applied.";
+
+          if (!applied && isAuthorizationError(message)) {
+            await loadRoles();
+            if (version === state.authVersion && state.authenticated) await loadRequests(request.id);
+            const authorizationError = new Error(message);
+            authorizationError.preventRetry = true;
+            throw authorizationError;
+          }
 
           if (!applied && applicationErrorNeedsRefresh(message)) {
             try {
@@ -564,7 +671,7 @@ export function initGovernanceWorkflow({
       section.append(warning);
     }
 
-    if (!applied) {
+    if (!applied && hasRole("baseline_controller")) {
       const apply = document.createElement("button");
       apply.type = "button";
       apply.className = "sf-governance-apply-button sf-governance-print-hide";
@@ -572,6 +679,11 @@ export function initGovernanceWorkflow({
       apply.disabled = state.pending || hasDrift || !hasCurrentBac;
       apply.addEventListener("click", () => openApplyDialog(request));
       section.append(apply);
+    } else if (!applied && state.rolesStatus === "ready") {
+      const note = document.createElement("p");
+      note.className = "sf-governance-permission-note sf-governance-print-hide";
+      note.textContent = "Baseline Controller role is required to apply an approved budget change.";
+      section.append(note);
     }
 
     host.append(section);
@@ -653,9 +765,7 @@ export function initGovernanceWorkflow({
       return;
     }
 
-    const adminNote = document.createElement("p");
-    adminNote.className = "sf-governance-admin-note";
-    adminNote.textContent = "Current prototype uses the authenticated Admin role for governance actions.";
+    renderPermissions(container);
     const feedback = document.createElement("div");
     feedback.className = "sf-governance-workflow-feedback";
     feedback.setAttribute("aria-live", "polite");
@@ -667,12 +777,26 @@ export function initGovernanceWorkflow({
     }
     const primaryActions = document.createElement("div");
     primaryActions.className = "sf-governance-workflow-primary sf-governance-print-hide";
-    const save = document.createElement("button");
-    save.type = "button";
-    save.disabled = state.pending || state.loading;
-    save.textContent = state.editingId ? "Save Draft Changes" : "Save as Draft";
-    save.addEventListener("click", state.editingId ? saveDraftChanges : saveDraft);
-    primaryActions.append(save);
+    const canSave = state.editingId
+      ? owningRequester(selectedRequest()) && selectedRequest()?.status === "Draft"
+      : hasRole("requester");
+    if (canSave) {
+      const save = document.createElement("button");
+      save.type = "button";
+      save.disabled = state.pending || state.loading;
+      save.textContent = state.editingId ? "Save Draft Changes" : "Save as Draft";
+      save.addEventListener("click", state.editingId ? saveDraftChanges : saveDraft);
+      primaryActions.append(save);
+    } else {
+      const note = document.createElement("p");
+      note.className = "sf-governance-permission-note";
+      note.textContent = state.rolesStatus === "ready"
+        ? "Requester role is required to create Change Requests."
+        : state.rolesStatus === "error"
+          ? "Governance permissions could not be loaded."
+          : "Loading governance permissions...";
+      primaryActions.append(note);
+    }
     if (state.editingId) {
       const indicator = document.createElement("strong");
       const cancel = document.createElement("button");
@@ -685,7 +809,7 @@ export function initGovernanceWorkflow({
       cancel.addEventListener("click", cancelEdit);
       primaryActions.append(indicator, cancel);
     }
-    container.append(adminNote, feedback);
+    container.append(feedback);
     if (saveArea) {
       saveArea.setAttribute("aria-labelledby", "sf-governance-save-title");
       const copy = document.createElement("div");
@@ -837,12 +961,14 @@ export function initGovernanceWorkflow({
 
   async function mutate(operation, requestId, successMessage) {
     if (state.pending) throw new Error("A governance action is already in progress.");
+    const version = state.authVersion;
     state.pending = true;
     state.error = "";
     state.success = "";
     render();
     try {
       const result = await operation();
+      if (version !== state.authVersion) return result;
       state.pending = false;
       state.success = typeof successMessage === "function"
         ? successMessage(result)
@@ -850,17 +976,23 @@ export function initGovernanceWorkflow({
       await loadRequests(requestId ?? result?.id ?? state.selectedId);
       return result;
     } catch (error) {
+      if (version !== state.authVersion) throw error;
       state.pending = false;
       const message = error?.message ?? "The governance action could not be completed.";
+      if (isAuthorizationError(message)) await loadRoles();
+      if (version !== state.authVersion) throw error;
       try {
         await loadRequests(requestId ?? state.selectedId);
       } catch {
         // Preserve the original mutation error.
       }
+      if (version !== state.authVersion) throw error;
       state.error = message;
       state.success = "";
       render();
-      throw new Error(message);
+      const workflowError = new Error(message);
+      workflowError.preventRetry = isAuthorizationError(message);
+      throw workflowError;
     }
   }
 
@@ -875,6 +1007,7 @@ export function initGovernanceWorkflow({
   }
 
   async function saveDraft() {
+    const version = state.authVersion;
     try {
       const current = validateAssessment();
       const created = await mutate(
@@ -882,15 +1015,17 @@ export function initGovernanceWorkflow({
         null,
         (request) => `${request.requestId} saved as Draft.`,
       );
+      if (version !== state.authVersion) return;
       state.selectedId = created.id;
     } catch (error) {
+      if (version !== state.authVersion) return;
       state.error = error?.message ?? "The Draft could not be created.";
       render();
     }
   }
 
   function editDraft(request) {
-    if (request.status !== "Draft") return;
+    if (request.status !== "Draft" || !owningRequester(request)) return;
     if (!assessment.loadAssessment(request)) {
       state.error = "The Draft project is not available in the current portfolio data.";
       render();
@@ -904,6 +1039,7 @@ export function initGovernanceWorkflow({
   }
 
   async function saveDraftChanges() {
+    const version = state.authVersion;
     const request = selectedRequest();
     try {
       if (!request || request.id !== state.editingId || request.status !== "Draft") {
@@ -915,10 +1051,12 @@ export function initGovernanceWorkflow({
         request.id,
         `${request.requestId} Draft changes saved.`,
       );
+      if (version !== state.authVersion) return;
       state.editingId = null;
       assessment.setProjectLocked(false);
       render();
     } catch (error) {
+      if (version !== state.authVersion) return;
       state.error = error?.message ?? "Draft changes could not be saved.";
       render();
     }
@@ -957,6 +1095,11 @@ export function initGovernanceWorkflow({
   async function handleAuthChange() {
     state.authVersion += 1;
     state.authenticated = isAuthenticated();
+    state.userId = state.authenticated ? getCurrentUser()?.id ?? null : null;
+    state.roles.clear();
+    state.rolesStatus = "idle";
+    state.rolesVersion += 1;
+    state.pending = false;
     state.requests = [];
     state.requestsLoaded = false;
     reporting.clear();
@@ -967,11 +1110,11 @@ export function initGovernanceWorkflow({
     state.success = "";
     assessment.setProjectLocked(false);
     render();
-    if (state.authenticated) await loadRequests();
+    if (state.authenticated) await Promise.all([loadRoles(), loadRequests()]);
   }
 
   render();
-  if (state.authenticated) loadRequests();
+  if (state.authenticated) Promise.all([loadRoles(), loadRequests()]);
 
   return { handleAuthChange };
 }
