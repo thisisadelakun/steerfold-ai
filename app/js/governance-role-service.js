@@ -43,6 +43,9 @@ async function errorMessage(response, fallback) {
     if (message.includes("Authentication is required")) {
       return "Sign in to access governance roles.";
     }
+    if (message.includes("Governance Admin role is required to access the governance user directory.")) {
+      return "Governance Admin role is required to access the governance user directory.";
+    }
     if (message.includes("Governance Admin role is required")) {
       return "Governance Admin role is required to manage role assignments.";
     }
@@ -112,6 +115,22 @@ export async function listGovernanceRoleAssignments() {
   const rows = await callRpc("list_governance_role_assignments", {}, "Governance role assignments could not be loaded.");
   if (!Array.isArray(rows)) throw new Error("Governance role assignments could not be loaded.");
   return rows.map(normalizeAssignment);
+}
+
+export async function listGovernanceUsers() {
+  const rows = await callRpc(
+    "list_governance_users",
+    {},
+    "The governance user directory could not be loaded.",
+  );
+  if (!Array.isArray(rows)) {
+    throw new Error("The governance user directory could not be loaded.");
+  }
+  return rows.map((row) => ({
+    userId: row.user_id,
+    email: row.email ?? null,
+    createdAt: row.created_at,
+  }));
 }
 
 export async function assignGovernanceRole(userId, role) {
