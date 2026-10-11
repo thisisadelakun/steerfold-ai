@@ -3,6 +3,7 @@ import { APP_CONFIG } from "./app-config.js";
 import { isAuthenticated, getCurrentUser } from "./auth-service.js";
 import { getMyGovernanceRoles } from "./governance-role-service.js";
 import { initGovernanceReporting } from "./governance-reporting.js";
+import { initGovernanceRoleManagement } from "./governance-role-management.js";
 import {
   listChangeRequests,
   createChangeRequest,
@@ -118,6 +119,7 @@ function openWorkflowDialog({
   pendingText = null,
   danger = false,
   onConfirm,
+  onClose,
 }) {
   if (document.getElementById(DIALOG_ID)) return;
   const previousFocus = document.activeElement;
@@ -195,6 +197,7 @@ function openWorkflowDialog({
     restoreBackground();
     overlay.remove();
     if (previousFocus?.isConnected) previousFocus.focus();
+    onClose?.();
   }
 
   function onKeydown(event) {
@@ -232,7 +235,8 @@ function openWorkflowDialog({
   restoreBackground = makeBackgroundInert(overlay);
   document.addEventListener("keydown", onKeydown);
   window.addEventListener("auth:changed", onAuthChange);
-  requestAnimationFrame(() => (noteLabel ? note : cancel).focus());
+  requestAnimationFrame(() => { if (!closed) (noteLabel ? note : cancel).focus(); });
+  return { close };
 }
 
 function assessmentPayload(assessment) {
@@ -354,6 +358,20 @@ export function initGovernanceWorkflow({
         detail.focus();
         detail.scrollIntoView({ block: "start", behavior: "auto" });
       }
+    },
+  });
+
+  const roleManagement = initGovernanceRoleManagement({
+    openDialog: openWorkflowDialog,
+    onSelfRolesChanged: async (message) => {
+      state.success = message;
+      state.error = "";
+      await loadRoles();
+    },
+    onAuthorizationError: async (message) => {
+      state.error = message;
+      state.success = "";
+      await loadRoles();
     },
   });
 
@@ -744,6 +762,11 @@ export function initGovernanceWorkflow({
   }
 
   function render() {
+    roleManagement.setAccess({
+      enabled: hasRole("governance_admin"),
+      resolving: state.authenticated && ["idle", "loading"].includes(state.rolesStatus),
+      userId: state.authenticated ? state.userId : null,
+    });
     container.replaceChildren();
     const saveArea = assessment.saveArea;
     if (saveArea) {
@@ -766,6 +789,7 @@ export function initGovernanceWorkflow({
     }
 
     renderPermissions(container);
+    if (hasRole("governance_admin")) container.append(roleManagement.element);
     const feedback = document.createElement("div");
     feedback.className = "sf-governance-workflow-feedback";
     feedback.setAttribute("aria-live", "polite");
