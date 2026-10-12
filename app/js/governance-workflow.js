@@ -265,6 +265,18 @@ function assessmentSnapshot(current) {
   });
 }
 
+function actorTimestamp(value) {
+  // Preserve PostgreSQL microseconds when comparing cycle timestamps.
+  const match = typeof value === "string"
+    ? value.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})(?:\.(\d{1,6}))?(Z|[+-]\d{2}:\d{2})$/)
+    : null;
+  if (!match) return null;
+  const milliseconds = Date.parse(`${match[1]}${match[3]}`);
+  return Number.isFinite(milliseconds)
+    ? BigInt(milliseconds) * 1000n + BigInt((match[2] || "").padEnd(6, "0"))
+    : null;
+}
+
 export function initGovernanceWorkflow({
   container,
   projects,
@@ -283,6 +295,8 @@ export function initGovernanceWorkflow({
     status: "All",
     loading: false,
     historyLoading: false,
+    historyRequestId: null,
+    historyVersion: 0,
     pending: false,
     editingId: null,
     savedAssessment: null,
@@ -301,7 +315,79 @@ export function initGovernanceWorkflow({
   }
 
   function ownsRequest(request) {
-    return Boolean(state.userId && request?.createdBy === state.userId);
+    return isCurrentUser(request?.createdBy);
+  }
+
+  function isCurrentUser(actorId) {
+    return Boolean(state.userId && typeof actorId === "string"
+      && actorId.toLowerCase() === state.userId.toLowerCase());
+  }
+
+  function resolveCycleActor(request, eventType, cycleTimestamp, fromStatuses, toStatus) {
+    if (state.loading || state.historyLoading || state.historyRequestId !== request.id) return null;
+    const cycle = actorTimestamp(cycleTimestamp);
+    if (cycle === null) return null;
+    const events = state.events.filter((event) => event.changeRequestId === request.id && event.eventType === eventType);
+    const timestamps = new Map(events.map((event) => [event, actorTimestamp(event.createdAt)]));
+    if (events.some((event) => timestamps.get(event) === null || typeof event.id !== "string")) return null;
+    const latest = [...events].sort((a, b) => {
+      const timeA = timestamps.get(a);
+      const timeB = timestamps.get(b);
+      if (timeA !== timeB) return timeA > timeB ? -1 : 1;
+      const idA = a.id.toLowerCase();
+      const idB = b.id.toLowerCase();
+      return idA === idB ? 0 : idA > idB ? -1 : 1;
+    })[0];
+    if (!latest || timestamps.get(latest) !== cycle
+      || !fromStatuses.includes(latest.fromStatus) || latest.toStatus !== toStatus
+      || typeof latest.performedBy !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(latest.performedBy)) return null;
+    return latest.performedBy;
+  }
+
+  function currentReviewer(request) {
+    return resolveCycleActor(request, "Review Started", request.reviewedAt, ["Submitted", "Deferred"], "Under Review");
+  }
+
+  function currentApprover(request) {
+    return resolveCycleActor(request, "Approved", request.decidedAt, ["Under Review"], "Approved");
+  }
+
+  function workflowEligibility(request, stage) {
+    const rules = {
+      review: ["reviewer", "Reviewer role is required to start or resume review.", ["Submitted", "Deferred"]],
+      decision: ["approver", "Approver role is required to record a governance decision.", ["Under Review"]],
+      apply: ["baseline_controller", "Baseline Controller role is required to apply an approved budget change.", ["Approved"]],
+    };
+    const [role, roleReason, statuses] = rules[stage];
+    let reason = "";
+    if (!state.authenticated || !state.userId || state.rolesStatus !== "ready") {
+      reason = "Governance permissions must be verified before this action is available.";
+    } else if (!hasRole(role)) reason = roleReason;
+    else if (!statuses.includes(request.status) || (stage === "apply" && request.appliedAt)) {
+      reason = "This action is no longer available for the selected Change Request.";
+    } else if (ownsRequest(request)) {
+      reason = stage === "review"
+        ? "Separation of duties prevents the request creator from reviewing their own request."
+        : stage === "decision"
+          ? "Separation of duties prevents the request creator from deciding their own request."
+          : "Separation of duties prevents the request creator from applying their own approved change.";
+    } else if (stage !== "review") {
+      const actor = stage === "decision" ? currentReviewer(request) : currentApprover(request);
+      if (!actor) reason = stage === "decision"
+        ? "Current reviewer identity cannot be verified. Decision controls are unavailable."
+        : "Approving actor identity cannot be verified. Baseline application is unavailable.";
+      else if (isCurrentUser(actor)) reason = stage === "decision"
+        ? "Separation of duties prevents the current reviewer from approving, rejecting or deferring this review."
+        : "Separation of duties prevents the approver from applying the change they approved.";
+    }
+    return { allowed: !reason, reason };
+  }
+
+  function requireWorkflowEligibility(request, stage) {
+    const current = selectedRequest();
+    const eligibility = current?.id === request.id ? workflowEligibility(current, stage) : null;
+    if (!eligibility?.allowed) throw new Error(eligibility?.reason || "Select this Change Request before performing its workflow action.");
   }
 
   function owningRequester(request) {
@@ -551,7 +637,11 @@ export function initGovernanceWorkflow({
       confirmText: isApproval ? "Record Approval" : label,
       danger: ["Rejected", "Withdrawn"].includes(newStatus),
       onConfirm: (note) => mutate(
-        () => transitionChangeRequestStatus(request.id, newStatus, note),
+        () => {
+          if (newStatus === "Under Review") requireWorkflowEligibility(request, "review");
+          else if (isDecision) requireWorkflowEligibility(request, "decision");
+          return transitionChangeRequestStatus(request.id, newStatus, note);
+        },
         request.id,
         `${request.requestId} moved to ${newStatus}.`,
       ),
@@ -560,19 +650,25 @@ export function initGovernanceWorkflow({
 
   function renderActions(host, request) {
     const actions = [];
+    let separationReason = "";
+    const allowStage = (stage) => {
+      const eligibility = workflowEligibility(request, stage);
+      if (!eligibility.allowed) separationReason = eligibility.reason;
+      return eligibility.allowed;
+    };
     if (request.status === "Draft" && owningRequester(request)) {
       actions.push(["Load Draft into Assessment", () => editDraft(request)]);
       actions.push(["Submit", () => transitionAction(request, "Submitted", "Submit Request")]);
       actions.push(["Withdraw", () => transitionAction(request, "Withdrawn", "Withdraw Request")]);
       actions.push(["Delete Draft", () => deleteDraft(request), "danger"]);
     } else if (request.status === "Submitted") {
-      if (hasRole("reviewer")) actions.push(["Start Review", () => transitionAction(request, "Under Review", "Start Review")]);
+      if (hasRole("reviewer") && allowStage("review")) actions.push(["Start Review", () => transitionAction(request, "Under Review", "Start Review")]);
       if (owningRequester(request)) actions.push(["Withdraw", () => transitionAction(request, "Withdrawn", "Withdraw Request")]);
-    } else if (request.status === "Under Review" && hasRole("approver")) {
+    } else if (request.status === "Under Review" && hasRole("approver") && allowStage("decision")) {
       actions.push(["Approve", () => transitionAction(request, "Approved", "Approve Request")]);
       actions.push(["Reject", () => transitionAction(request, "Rejected", "Reject Request"), "danger"]);
       actions.push(["Defer", () => transitionAction(request, "Deferred", "Defer Request")]);
-    } else if (request.status === "Deferred" && hasRole("reviewer")) {
+    } else if (request.status === "Deferred" && hasRole("reviewer") && allowStage("review")) {
       actions.push(["Resume Review", () => transitionAction(request, "Under Review", "Resume Review")]);
     }
     actions.forEach(([label, handler, tone]) => {
@@ -584,7 +680,12 @@ export function initGovernanceWorkflow({
       button.addEventListener("click", handler);
       host.append(button);
     });
-    if (!actions.length && state.rolesStatus === "ready") {
+    if (separationReason) {
+      const note = document.createElement("p");
+      note.className = "sf-governance-permission-note";
+      note.textContent = separationReason;
+      host.append(note);
+    } else if (!actions.length && state.rolesStatus === "ready") {
       const messages = {
         Draft: ownsRequest(request)
           ? "Requester role is required to modify this Draft."
@@ -631,6 +732,7 @@ export function initGovernanceWorkflow({
         const version = state.authVersion;
         let applied = false;
         try {
+          requireWorkflowEligibility(request, "apply");
           await applyApprovedChangeRequest(request.id, applicationNote);
           applied = true;
           if (version !== state.authVersion) return;
@@ -721,7 +823,8 @@ export function initGovernanceWorkflow({
       section.append(warning);
     }
 
-    if (!applied && hasRole("baseline_controller")) {
+    const applicationEligibility = workflowEligibility(request, "apply");
+    if (!applied && applicationEligibility.allowed) {
       const apply = document.createElement("button");
       apply.type = "button";
       apply.className = "sf-governance-apply-button sf-governance-print-hide";
@@ -732,7 +835,7 @@ export function initGovernanceWorkflow({
     } else if (!applied && state.rolesStatus === "ready") {
       const note = document.createElement("p");
       note.className = "sf-governance-permission-note sf-governance-print-hide";
-      note.textContent = "Baseline Controller role is required to apply an approved budget change.";
+      note.textContent = applicationEligibility.reason;
       section.append(note);
     }
 
@@ -955,18 +1058,21 @@ export function initGovernanceWorkflow({
   }
 
   async function loadHistory(requestId, version = state.authVersion) {
+    const historyVersion = ++state.historyVersion;
+    state.historyRequestId = null;
     state.historyLoading = true;
     state.events = [];
     render();
     try {
       const events = await listChangeRequestEvents(requestId);
-      if (version !== state.authVersion || state.selectedId !== requestId) return;
+      if (version !== state.authVersion || historyVersion !== state.historyVersion || state.selectedId !== requestId) return;
       state.events = events;
+      state.historyRequestId = requestId;
     } catch (error) {
-      if (version !== state.authVersion) return;
+      if (version !== state.authVersion || historyVersion !== state.historyVersion || state.selectedId !== requestId) return;
       state.error = error?.message ?? "Activity history could not be loaded.";
     } finally {
-      if (version === state.authVersion && state.selectedId === requestId) {
+      if (version === state.authVersion && historyVersion === state.historyVersion && state.selectedId === requestId) {
         state.historyLoading = false;
         render();
       }
@@ -975,6 +1081,10 @@ export function initGovernanceWorkflow({
 
   async function loadRequests(preferredId = state.selectedId) {
     const version = state.authVersion;
+    state.historyVersion += 1;
+    state.historyRequestId = null;
+    state.historyLoading = false;
+    state.events = [];
     state.loading = true;
     render();
     try {
@@ -1170,6 +1280,9 @@ export function initGovernanceWorkflow({
     state.requests = [];
     state.requestsLoaded = false;
     reporting.clear();
+    state.historyVersion += 1;
+    state.historyRequestId = null;
+    state.historyLoading = false;
     state.events = [];
     state.selectedId = null;
     state.editingId = null;
