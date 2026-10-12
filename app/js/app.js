@@ -4,7 +4,7 @@ import {
 } from "./project-view.js";
 
 import {
-  formatCurrency,
+  formatDisplayCurrency,
   formatPercent,
 } from "./formatters.js";
 
@@ -87,6 +87,8 @@ import { printCurrentView } from "./export-service.js";
 import { isAuthenticated } from "./auth-service.js";
 
 import { APP_CONFIG } from "./app-config.js";
+import { getCurrencyState, setDisplayCurrency, subscribeCurrencyChanges, refreshCurrencyRate } from "./currency-preferences.js";
+import { registerCurrencyRenderer } from "./currency-presentation.js";
 
 function isPlainLeftClick(event) {
   return (
@@ -252,6 +254,7 @@ const SteerfoldApp = {
 
     this.cacheElements();
     this.applyAppConfig();
+    this.setupCurrencyPreferences();
     this.setupSidebar();
     this.setupFilters();
     this.setupProjectFilters();
@@ -285,6 +288,11 @@ const SteerfoldApp = {
     this.currencyIndicator = document.querySelector(
       "[data-currency-indicator]",
     );
+    this.displayCurrencySelect = document.querySelector("[data-display-currency]");
+    this.currencyStatus = document.querySelector("[data-currency-status]");
+    this.currencyPreview = document.querySelector("[data-currency-preview]");
+    this.printCurrencyContext = document.querySelector("[data-print-currency-context]");
+    this.organizationCurrencyValue = document.querySelector("[data-organization-currency]");
     this.accountArea = document.querySelector(
       ".sf-page-header .sf-account-area",
     );
@@ -474,8 +482,8 @@ const SteerfoldApp = {
       return;
     }
 
-    const currencyCode =
-      APP_CONFIG.portfolio.currencyCode;
+    const { displayCurrency, organizationCurrency, conversionRequired, fxStatus } = getCurrencyState();
+    const conversionReady = conversionRequired && fxStatus === "ready";
     const label =
       document.createElement("span");
 
@@ -485,13 +493,120 @@ const SteerfoldApp = {
 
     this.currencyIndicator.setAttribute(
       "aria-label",
-      `Display currency: ${currencyCode}`,
+      conversionRequired
+        ? conversionReady
+          ? `Display currency: ${displayCurrency}. Converted from ${organizationCurrency}.`
+          : `Display preference: ${displayCurrency}. Conversion unavailable; values remain in ${organizationCurrency}.`
+        : `Display currency: ${displayCurrency}`,
     );
 
     this.currencyIndicator.replaceChildren(
       label,
-      document.createTextNode(` ${currencyCode}`),
+      document.createTextNode(` ${displayCurrency}`),
     );
+    this.currencyIndicator.dataset.fxDetail = String(conversionRequired);
+    if (conversionRequired) {
+      const status = document.createElement("span");
+      status.className = "sf-currency-fallback";
+      status.textContent = conversionReady ? `Converted from ${organizationCurrency}` : `Values in ${organizationCurrency}`;
+      this.currencyIndicator.append(status);
+    }
+  },
+
+  setupCurrencyPreferences() {
+    const update = () => {
+      const state = getCurrencyState();
+      if (this.displayCurrencySelect) this.displayCurrencySelect.value = state.displayCurrency;
+      if (this.organizationCurrencyValue) {
+        const option = [...(this.displayCurrencySelect?.options ?? [])]
+          .find((item) => item.value === state.organizationCurrency);
+        this.organizationCurrencyValue.textContent = option?.textContent ?? state.organizationCurrency;
+      }
+      if (this.currencyStatus) {
+        this.currencyStatus.replaceChildren();
+        const addStatusRow = (text, className = "sf-fx-note") => {
+          const row = document.createElement("p");
+          row.className = className;
+          row.textContent = text;
+          this.currencyStatus.append(row);
+        };
+        if (!state.conversionRequired) {
+          addStatusRow(`Values are displayed in ${state.baseCurrency}.`);
+          addStatusRow("No exchange rate is required.");
+        } else if (state.fxStatus === "loading") {
+          addStatusRow("Loading exchange rate\u2026", "sf-fx-reference");
+          addStatusRow(`Values remain in ${state.baseCurrency}.`, "sf-fx-caution");
+        } else if (state.fxStatus === "ready") {
+          const rate = new Intl.NumberFormat(APP_CONFIG.portfolio.locale, { maximumSignificantDigits: 7 }).format(state.rate);
+          const date = new Intl.DateTimeFormat(APP_CONFIG.portfolio.locale, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${state.rateDate}T00:00:00Z`));
+          const fetchedAt = new Date(state.fetchedAt);
+          const fetchedDate = new Intl.DateTimeFormat(APP_CONFIG.portfolio.locale, { dateStyle: "medium" }).format(fetchedAt);
+          const fetchedTime = new Intl.DateTimeFormat(APP_CONFIG.portfolio.locale, { timeStyle: "short" }).format(fetchedAt);
+          addStatusRow(`1 ${state.baseCurrency} = ${rate} ${state.displayCurrency}`, "sf-fx-rate");
+          addStatusRow(`Reference rate: ${state.provider} \u00b7 ${date}`, "sf-fx-reference");
+          addStatusRow(`Retrieved: ${fetchedDate} \u00b7 ${fetchedTime}`);
+          addStatusRow("Reference rate for display purposes.");
+          addStatusRow(`Stored portfolio and governance values remain in ${state.baseCurrency}.`, "sf-fx-caution");
+        } else {
+          addStatusRow(`Selected display currency: ${state.displayCurrency}`, "sf-fx-reference");
+          addStatusRow("Conversion is unavailable.");
+          addStatusRow(state.fxError || "A valid reference rate could not be loaded.");
+          addStatusRow(`Values remain in ${state.baseCurrency}.`, "sf-fx-caution");
+        }
+        if (!state.persistenceAvailable) addStatusRow("This browser could not save your preference.", "sf-fx-caution");
+      }
+      if (this.currencyPreview) {
+        const sourceAmount = new Intl.NumberFormat(APP_CONFIG.portfolio.locale, { maximumFractionDigits: 0 }).format(100);
+        const label = document.createElement("p");
+        label.className = "sf-currency-preview-label";
+        label.textContent = "Display example";
+        const values = document.createElement("div");
+        values.className = "sf-currency-preview-values";
+        const source = document.createElement("span");
+        source.textContent = `${state.organizationCurrency} ${sourceAmount}`;
+        const arrow = document.createElement("span");
+        arrow.textContent = "\u2192";
+        const converted = document.createElement("strong");
+        converted.textContent = formatDisplayCurrency(100);
+        values.append(source, arrow, converted);
+        this.currencyPreview.replaceChildren(label, values);
+      }
+      this.renderCurrencyIndicator();
+    };
+    this.displayCurrencySelect?.addEventListener("change", () => setDisplayCurrency(this.displayCurrencySelect.value));
+    subscribeCurrencyChanges(update);
+    registerCurrencyRenderer(this.mainArea, () => {
+      this.refreshMonetaryPresentation();
+      this.updatePrintCurrencyContext();
+    });
+    update();
+    this.updatePrintCurrencyContext();
+    refreshCurrencyRate();
+  },
+
+  updatePrintCurrencyContext() {
+    if (!this.printCurrencyContext) return;
+    const state = getCurrencyState();
+    this.printCurrencyContext.textContent = state.conversionRequired && state.fxStatus === "ready"
+      ? `Display currency: ${state.activeCurrency}. Converted from ${state.organizationCurrency} using ${state.provider} reference rates dated ${state.rateDate}. Stored values remain in ${state.organizationCurrency}.`
+      : `Display currency: ${state.organizationCurrency} (organization currency).${state.conversionRequired ? ` ${state.displayCurrency} conversion unavailable.` : ""}`;
+  },
+
+  refreshMonetaryPresentation() {
+    const projects = this.state.projects;
+    if (!projects.length) return;
+    this.renderFinancialPerformance(projects);
+    if (this.portfolioAnalysisChart) this.portfolioAnalysisChart.replaceChildren(this.createSelectedPortfolioAnalysisChart(projects));
+    this.renderPortfolioInsights(projects);
+    this.renderBudgetKpis(projects);
+    this.renderProjectVariance(projects);
+    this.renderForecastingKpis(projects);
+    this.renderPortfolioForecast(projects);
+    this.renderProjectForecastAnalysis(projects);
+    this.renderDecisionSupportKpis(projects);
+    this.renderPriorityRecommendations(projects);
+    this.renderDecisionFactors(projects);
+    this.applyFilters();
   },
 
   setupPortfolioContext() {
@@ -2239,8 +2354,8 @@ renderBudgetKpis(projects) {
     if (value) value.textContent = valueText;
   };
 
-  const cvText = formatCurrency(summary.cv);
-  const svText = formatCurrency(summary.sv);
+  const cvText = formatDisplayCurrency(summary.cv);
+  const svText = formatDisplayCurrency(summary.sv);
 
   const cpiText = summary.cpi === null ? "—" : String(summary.cpi.toFixed(2));
   const spiText = summary.spi === null ? "—" : String(summary.spi.toFixed(2));
@@ -2323,9 +2438,9 @@ renderForecastingKpis(projects) {
     if (value) value.textContent = valueText;
   };
 
-  const eacText = forecast.eac === null ? "—" : formatCurrency(forecast.eac);
-  const etcText = forecast.etc === null ? "—" : formatCurrency(forecast.etc);
-  const vacText = forecast.vac === null ? "—" : formatCurrency(forecast.vac);
+  const eacText = forecast.eac === null ? "—" : formatDisplayCurrency(forecast.eac);
+  const etcText = forecast.etc === null ? "—" : formatDisplayCurrency(forecast.etc);
+  const vacText = forecast.vac === null ? "—" : formatDisplayCurrency(forecast.vac);
   const tcpiText = forecast.tcpi === null ? "—" : String(forecast.tcpi.toFixed(2));
 
   setCard(eacCard, "Estimate at Completion (EAC)", eacText);
@@ -2394,7 +2509,7 @@ renderDecisionSupportKpis(projects) {
 
   setCard(attentionCard, "Projects Requiring Attention", String(summary.projectsRequiringAttention));
   setCard(criticalCard, "Critical Priority", String(summary.criticalPriority));
-  setCard(exposureCard, "Forecast Budget Exposure", formatCurrency(summary.forecastBudgetExposure));
+  setCard(exposureCard, "Forecast Budget Exposure", formatDisplayCurrency(summary.forecastBudgetExposure));
   setCard(actionsCard, "Recommended Actions", String(summary.recommendedActions));
 
   const attentionValueEl = attentionCard?.querySelector(".sf-kpi-value");
@@ -2718,7 +2833,7 @@ const insights = [
 
       this.appendCell(
         row,
-        formatCurrency(
+        formatDisplayCurrency(
           project.budgetBAC,
         ),
       );

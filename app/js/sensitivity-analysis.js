@@ -1,5 +1,6 @@
 import { calculateProjectForecast } from "./portfolio-analytics.js";
-import { formatCurrency } from "./formatters.js";
+import { formatDisplayCurrency } from "./formatters.js";
+import { registerCurrencyRenderer } from "./currency-presentation.js";
 import { validateScenarioValues } from "./scenario-analysis.js";
 
 const ASSUMPTIONS = [
@@ -11,7 +12,7 @@ const ASSUMPTIONS = [
 const VARIATIONS = [0.05, 0.1, 0.15, 0.2];
 
 function formatAmount(value) {
-  return Number.isFinite(value) ? formatCurrency(value) : "\u2014";
+  return Number.isFinite(value) ? formatDisplayCurrency(value) : "\u2014";
 }
 
 function getForecastEac(project, values) {
@@ -322,5 +323,6 @@ export function renderSensitivityAnalysis(container, project) {
   controls.append(projectName, field);
   workspace.append(controls, note, output);
   container.replaceChildren(workspace);
+  registerCurrencyRenderer(workspace, update);
   update();
 }

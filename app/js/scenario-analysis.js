@@ -2,8 +2,9 @@ import {
   calculateProjectEvm,
   calculateProjectForecast,
 } from "./portfolio-analytics.js";
-import { formatCurrency } from "./formatters.js";
+import { formatDisplayCurrency } from "./formatters.js";
 import { APP_CONFIG } from "./app-config.js";
+import { registerCurrencyRenderer } from "./currency-presentation.js";
 
 const FIELDS = [
   { key: "budgetBAC", label: "Approved Budget (BAC)" },
@@ -49,7 +50,7 @@ function formatMetric(value, type) {
     return "\u2014";
   }
 
-  return type === "ratio" ? value.toFixed(2) : formatCurrency(value);
+  return type === "ratio" ? value.toFixed(2) : formatDisplayCurrency(value);
 }
 
 function getMetrics(project) {
@@ -133,10 +134,10 @@ function getImpact(current, scenario) {
       return "Scenario brings forecast cost within the scenario budget assumption.";
     }
 
-    return `Scenario forecast improves by ${formatCurrency(Math.abs(difference))}${scenario.vac < 0 ? " but remains above the scenario budget assumption" : " and remains within the scenario budget assumption"}.`;
+    return `Scenario forecast improves by ${formatDisplayCurrency(Math.abs(difference))}${scenario.vac < 0 ? " but remains above the scenario budget assumption" : " and remains within the scenario budget assumption"}.`;
   }
 
-  return `Scenario increases forecast cost by ${formatCurrency(difference)}${current.vac >= 0 && scenario.vac < 0 ? " and moves above the scenario budget assumption" : ""}.`;
+  return `Scenario increases forecast cost by ${formatDisplayCurrency(difference)}${current.vac >= 0 && scenario.vac < 0 ? " and moves above the scenario budget assumption" : ""}.`;
 }
 
 function getPerformanceSignals(current, scenario) {
@@ -318,7 +319,7 @@ export function renderScenarioAnalysis(
   reset.className = "sf-scenario-reset";
   reset.textContent = "Reset Scenario";
   note.className = "sf-scenario-note";
-  note.textContent = "Scenario values are temporary and do not modify project records.";
+  note.textContent = `Scenario inputs use ${APP_CONFIG.portfolio.currencyCode}. Values are temporary and do not modify project records.`;
   inputs.className = "sf-scenario-inputs";
   inputHeading.className = "sf-scenario-input-heading";
   ["Financial assumption", "Current value", "Scenario value"].forEach((text) => {
@@ -337,7 +338,7 @@ export function renderScenarioAnalysis(
 
     row.className = "sf-scenario-input-row";
     label.htmlFor = `sf-scenario-${field.key}`;
-    label.textContent = `Scenario ${field.label}`;
+    label.textContent = `Scenario ${field.label} (${APP_CONFIG.portfolio.currencyCode})`;
     current.className = "sf-scenario-current-value";
     input.id = `sf-scenario-${field.key}`;
     input.type = "number";
@@ -367,6 +368,9 @@ export function renderScenarioAnalysis(
   impact.setAttribute("aria-live", "polite");
 
   function renderResults() {
+    FIELDS.forEach((field) => {
+      inputElements.get(field.key).current.textContent = formatMetric(selectedProject[field.key], "currency");
+    });
     const current = getMetrics(selectedProject);
     const {
       errors,
@@ -440,6 +444,7 @@ export function renderScenarioAnalysis(
   controls.append(projectField, reset);
   workspace.append(controls, note, inputs, results, impact);
   container.replaceChildren(workspace);
+  registerCurrencyRenderer(workspace, renderResults);
   loadSelectedProject();
   if (typeof onProjectChange === "function") {
     onProjectChange(selectedProject);

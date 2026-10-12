@@ -76,9 +76,31 @@ The app calculates and displays common project performance and forecasting indic
 
 VS Code Live Server or another static file server can be used. Avoid opening `index.html` directly with `file://`, because ES modules and CSV fetch requests may fail.
 
+### Local FX Function
+
+Display conversion uses the same-origin Netlify Function at
+`/.netlify/functions/fx-rate?base=CAD&quote=USD`. A plain static server cannot
+execute this function; foreign conversion then safely retains organization-currency values.
+
+From the repository root, use Netlify Dev to serve the application and function:
+
+```sh
+npx netlify-cli dev --offline --dir app --port 3000
+```
+
+Open `http://localhost:3000/#settings`. The command requires Node.js/npm and
+downloads the Netlify CLI if it is not already available. It does not deploy the site.
+The function uses Frankfurter v2 daily reference rates; no browser-side provider
+bypass or Supabase FX tables are used. Monetary readouts and print output use the
+selected display currency when a validated rate is ready. Operational financial
+inputs, stored records, and calculations remain in the organization currency.
+Missing or unverified rates safely retain organization-currency notation.
+
 ## Deployment
 
-The app can be deployed as a static site.
+The frontend remains a static web application. Full display-currency conversion
+requires the Netlify FX Function; hosting without it safely falls back to
+organization-currency values.
 
 Recommended hosting: Netlify
 
@@ -117,7 +139,7 @@ app/
 
 - Single organization per deployment
 - No multi-tenancy yet
-- No live FX conversion
+- Reference-rate display conversion; authoritative financial inputs and records remain in organization currency
 - No editable organization settings UI
 
 ## Future Enhancements

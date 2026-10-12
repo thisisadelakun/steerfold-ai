@@ -10,12 +10,13 @@ import {
 } from "./portfolio-analytics.js";
 
 import {
-  formatCurrency,
+  formatDisplayCurrency,
   formatDate,
   formatPercent,
 } from "./formatters.js";
 
 import { APP_CONFIG } from "./app-config.js";
+import { registerCurrencyRenderer } from "./currency-presentation.js";
 
 const STAKEHOLDER_AUDIENCES = [
   {
@@ -177,7 +178,7 @@ function safeNumber(value, fallback = 0) {
 }
 
 function formatMaybeCurrency(value) {
-  return Number.isFinite(value) ? formatCurrency(value) : "—";
+  return Number.isFinite(value) ? formatDisplayCurrency(value) : "—";
 }
 
 function formatMaybeIndex(value) {
@@ -444,13 +445,13 @@ function renderExecutiveKeySignals(container, projects) {
   container.replaceChildren(
     createKpiCard({
       label: "Portfolio Budget",
-      value: formatCurrency(financialSummary.totalBAC),
+      value: formatDisplayCurrency(financialSummary.totalBAC),
       support: "Total approved project budget.",
     }),
     createKpiCard({
       label: "Forecast at Completion",
       value: Number.isFinite(forecast.eac)
-        ? formatCurrency(forecast.eac)
+        ? formatDisplayCurrency(forecast.eac)
         : "—",
       support: "Projected final portfolio cost.",
       className:
@@ -655,7 +656,7 @@ function createFinancialOutlook(projects) {
     item.className = "sf-exec-financial-row";
     label.textContent = row.label;
     value.textContent =
-      numericValue === null ? "—" : formatCurrency(numericValue);
+      numericValue === null ? "—" : formatDisplayCurrency(numericValue);
     track.className = "sf-exec-bar-track";
     bar.className = `sf-exec-bar ${row.className}`;
     bar.style.width = `${width}%`;
@@ -1380,7 +1381,7 @@ function getSponsorForecastLanguage(vac) {
   }
 
   if (vac < 0) {
-    return `Forecast is ${formatCurrency(Math.abs(vac))} over approved budget.`;
+    return `Forecast is ${formatDisplayCurrency(Math.abs(vac))} over approved budget.`;
   }
 
   if (vac === 0) {
@@ -1542,7 +1543,7 @@ function getSponsorAttentionSignals(project) {
 
   if (signals.forecastOverBudget) {
     items.push(
-      `Forecast cost exceeds approved budget by ${formatCurrency(Math.abs(signals.vac))}.`,
+      `Forecast cost exceeds approved budget by ${formatDisplayCurrency(Math.abs(signals.vac))}.`,
     );
   }
 
@@ -1780,7 +1781,7 @@ function getTeamEarnedValueLanguage(evm) {
     Number.isFinite(evm.pv) &&
     evm.ev < evm.pv
   ) {
-    return `Earned value is trailing planned value by ${formatCurrency(evm.pv - evm.ev)}.`;
+    return `Earned value is trailing planned value by ${formatDisplayCurrency(evm.pv - evm.ev)}.`;
   }
 
   if (
@@ -1788,7 +1789,7 @@ function getTeamEarnedValueLanguage(evm) {
     Number.isFinite(evm.pv) &&
     evm.ev > evm.pv
   ) {
-    return `Earned value is ahead of planned value by ${formatCurrency(evm.ev - evm.pv)}.`;
+    return `Earned value is ahead of planned value by ${formatDisplayCurrency(evm.ev - evm.pv)}.`;
   }
 
   if (
@@ -1804,7 +1805,7 @@ function getTeamEarnedValueLanguage(evm) {
     Number.isFinite(evm.ev) &&
     evm.ac > evm.ev
   ) {
-    return `Actual cost exceeds earned value by ${formatCurrency(evm.ac - evm.ev)}.`;
+    return `Actual cost exceeds earned value by ${formatDisplayCurrency(evm.ac - evm.ev)}.`;
   }
 
   return "Earned value, planned value and actual cost are currently aligned.";
@@ -2007,7 +2008,7 @@ function getTeamAttentionSignals(project) {
   let hasCostSignal = false;
 
   if (Number.isFinite(evm.cv) && evm.cv < 0) {
-    items.push(`Cost variance is ${formatCurrency(evm.cv)}.`);
+    items.push(`Cost variance is ${formatDisplayCurrency(evm.cv)}.`);
     hasCostSignal = true;
   } else if (signals.costInefficient) {
     items.push(
@@ -2017,7 +2018,7 @@ function getTeamAttentionSignals(project) {
   }
 
   if (Number.isFinite(evm.sv) && evm.sv < 0) {
-    items.push(`Schedule variance is ${formatCurrency(evm.sv)}.`);
+    items.push(`Schedule variance is ${formatDisplayCurrency(evm.sv)}.`);
   } else if (signals.scheduleInefficient) {
     items.push(
       `SPI ${formatMaybeIndex(signals.spi)} indicates schedule efficiency below target.`,
@@ -2047,7 +2048,7 @@ function getTeamAttentionSignals(project) {
     forecast.vac < 0
   ) {
     items.push(
-      `Forecast pressure is ${formatCurrency(Math.abs(forecast.vac))} over approved budget.`,
+      `Forecast pressure is ${formatDisplayCurrency(Math.abs(forecast.vac))} over approved budget.`,
     );
   }
 
@@ -2383,4 +2384,10 @@ export function renderStakeholderView(
   }
 
   updateStakeholderView(container);
+  registerCurrencyRenderer(container, () => {
+    const audience = getSelectedAudience().key;
+    if (audience === "executive") renderExecutiveDashboard(container, currentProjects);
+    else if (audience === "sponsor") renderSponsorDashboard(container, currentProjects);
+    else if (audience === "team") renderTeamDashboard(container, currentProjects);
+  });
 }

@@ -1,4 +1,4 @@
-import { formatCurrency } from "./formatters.js";
+import { formatDisplayCurrency } from "./formatters.js";
 
 import { APP_CONFIG } from "./app-config.js";
 
@@ -96,7 +96,7 @@ export function createFinancialPerformanceChart(summary) {
       `${metric.label} (${metric.shortLabel})`;
 
     value.textContent =
-      formatCurrency(metric.value);
+      formatDisplayCurrency(metric.value);
 
     const percentage =
       (metric.value / maximumValue) * 100;
@@ -106,7 +106,7 @@ export function createFinancialPerformanceChart(summary) {
 
     bar.setAttribute(
       "aria-label",
-      `${metric.label}: ${formatCurrency(metric.value)}`,
+      `${metric.label}: ${formatDisplayCurrency(metric.value)}`,
     );
 
     heading.append(
@@ -788,11 +788,11 @@ export function createBudgetActualChart(projects) {
     actualBar.style.width =
       `${clamp((actual / maximumValue) * 100, 0, 100)}%`;
     values.textContent =
-      `BAC ${formatCurrency(budget)} | AC ${formatCurrency(actual)}`;
+      `BAC ${formatDisplayCurrency(budget)} | AC ${formatDisplayCurrency(actual)}`;
 
     row.setAttribute(
       "aria-label",
-      `${name.textContent}: Budget at Completion ${formatCurrency(budget)}, Actual Cost ${formatCurrency(actual)}`,
+      `${name.textContent}: Budget at Completion ${formatDisplayCurrency(budget)}, Actual Cost ${formatDisplayCurrency(actual)}`,
     );
 
     budgetTrack.append(budgetBar);
@@ -1559,14 +1559,14 @@ export function createPortfolioForecastChart(forecast) {
     label.textContent = row.label;
 
     if (row.hasValue) {
-      value.textContent = formatCurrency(row.value);
+      value.textContent = formatDisplayCurrency(row.value);
       const percentage =
         (row.value / maximumValue) * 100;
       fill.style.width =
         `${Math.max(percentage, 0)}%`;
       fill.setAttribute(
         "aria-label",
-        `${row.label}: ${formatCurrency(row.value)}`,
+        `${row.label}: ${formatDisplayCurrency(row.value)}`,
       );
     } else {
       value.textContent = "—";
@@ -1768,12 +1768,12 @@ export function createProjectVarianceChart(data) {
     // Project name
     project.textContent = item.projectName || item.projectId || "Unnamed";
 
-    // Values text using formatCurrency
+    // Values text using formatDisplayCurrency
     const hasCv = typeof item.cv === "number" && !Number.isNaN(item.cv);
     const hasSv = typeof item.sv === "number" && !Number.isNaN(item.sv);
 
-    cvVal.textContent = hasCv ? formatCurrency(item.cv) : "—";
-    svVal.textContent = hasSv ? formatCurrency(item.sv) : "—";
+    cvVal.textContent = hasCv ? formatDisplayCurrency(item.cv) : "—";
+    svVal.textContent = hasSv ? formatDisplayCurrency(item.sv) : "—";
 
     // Position bars relative to zero at 50%
     // Calculate visual width as proportion of maxAbs, mapped to 50% each side
@@ -1790,7 +1790,7 @@ export function createProjectVarianceChart(data) {
       const geo = barGeometry(item.cv);
       cvBar.style.left = `${geo.left}%`;
       cvBar.style.width = `${geo.width}%`;
-      cvBar.setAttribute("aria-label", `CV: ${formatCurrency(item.cv)}`);
+      cvBar.setAttribute("aria-label", `CV: ${formatDisplayCurrency(item.cv)}`);
     } else {
       cvBar.setAttribute("aria-hidden", "true");
     }
@@ -1799,13 +1799,13 @@ export function createProjectVarianceChart(data) {
       const geo = barGeometry(item.sv);
       svBar.style.left = `${geo.left}%`;
       svBar.style.width = `${geo.width}%`;
-      svBar.setAttribute("aria-label", `SV: ${formatCurrency(item.sv)}`);
+      svBar.setAttribute("aria-label", `SV: ${formatDisplayCurrency(item.sv)}`);
     } else {
       svBar.setAttribute("aria-hidden", "true");
     }
 
     // Accessibility label for the row
-    const rowDesc = `${project.textContent}: CV ${hasCv ? formatCurrency(item.cv) : "—"}, SV ${hasSv ? formatCurrency(item.sv) : "—"}`;
+    const rowDesc = `${project.textContent}: CV ${hasCv ? formatDisplayCurrency(item.cv) : "—"}, SV ${hasSv ? formatDisplayCurrency(item.sv) : "—"}`;
     row.setAttribute("aria-label", rowDesc);
 
     // Assemble elements
@@ -1962,14 +1962,14 @@ export function createProjectForecastAnalysisChart(data) {
     /* BAC value and bar */
     if (hasBac) {
       bacVal.textContent =
-        formatCurrency(item.bac);
+        formatDisplayCurrency(item.bac);
 
       bacBar.style.width =
         `${Math.max((item.bac / maximumValue) * 100, 0)}%`;
 
       bacBar.setAttribute(
         "aria-label",
-        `Approved Budget (BAC): ${formatCurrency(item.bac)}`,
+        `Approved Budget (BAC): ${formatDisplayCurrency(item.bac)}`,
       );
     } else {
       bacVal.textContent = "—";
@@ -1980,14 +1980,14 @@ export function createProjectForecastAnalysisChart(data) {
     /* EAC value and bar */
     if (hasEac) {
       eacVal.textContent =
-        formatCurrency(item.eac);
+        formatDisplayCurrency(item.eac);
 
       eacBar.style.width =
         `${Math.max((item.eac / maximumValue) * 100, 0)}%`;
 
       eacBar.setAttribute(
         "aria-label",
-        `Projected Final Cost (EAC): ${formatCurrency(item.eac)}`,
+        `Projected Final Cost (EAC): ${formatDisplayCurrency(item.eac)}`,
       );
 
       /* Semantic class based on budget position */
@@ -2011,8 +2011,8 @@ export function createProjectForecastAnalysisChart(data) {
     /* Accessibility label for the row */
     const rowDesc =
       `${name.textContent}: ` +
-      `BAC ${hasBac ? formatCurrency(item.bac) : "—"}, ` +
-      `EAC ${hasEac ? formatCurrency(item.eac) : "—"}`;
+      `BAC ${hasBac ? formatDisplayCurrency(item.bac) : "—"}, ` +
+      `EAC ${hasEac ? formatDisplayCurrency(item.eac) : "—"}`;
 
     row.setAttribute(
       "aria-label",

@@ -1,5 +1,7 @@
 import { calculateProjectForecast } from "./portfolio-analytics.js";
-import { formatCurrency } from "./formatters.js";
+import { formatDisplayCurrency } from "./formatters.js";
+import { APP_CONFIG } from "./app-config.js";
+import { registerCurrencyRenderer } from "./currency-presentation.js";
 
 const EMPTY = "\u2014";
 const DIMENSIONS = ["Scope", "Schedule", "Cost", "Quality", "Resources", "Risk", "Stakeholders"];
@@ -22,7 +24,7 @@ const ROLES = [
 ];
 
 function money(value) {
-  return Number.isFinite(value) ? formatCurrency(value) : EMPTY;
+  return Number.isFinite(value) ? formatDisplayCurrency(value) : EMPTY;
 }
 
 function percent(value) {
@@ -313,7 +315,7 @@ export function renderGovernanceView(container, projects) {
     <div class="sf-governance-top-grid">
       <section class="sf-panel" aria-labelledby="sf-governance-change-title"><div class="sf-section-header"><div><p class="sf-governance-eyebrow">Proposed Change</p><h2 id="sf-governance-change-title">Change Details</h2></div></div>
         <div class="sf-governance-form">
-          <div class="sf-governance-field"><label for="sf-governance-amount">Budget Change Amount (CAD)</label><input id="sf-governance-amount" class="sf-governance-control" type="number" step="any" value="0" aria-describedby="sf-governance-error" data-gov-amount><small>Positive increases budget; negative reduces it.</small><p id="sf-governance-error" class="sf-governance-error" data-gov-error hidden></p></div>
+          <div class="sf-governance-field"><label for="sf-governance-amount">Budget Change Amount (${APP_CONFIG.portfolio.currencyCode})</label><input id="sf-governance-amount" class="sf-governance-control" type="number" step="any" value="0" aria-describedby="sf-governance-error" data-gov-amount><small>Positive increases budget; negative reduces it.</small><p id="sf-governance-error" class="sf-governance-error" data-gov-error hidden></p></div>
           <div class="sf-governance-field"><label for="sf-governance-type">Change Type</label><select id="sf-governance-type" class="sf-governance-control" data-gov-type></select></div>
           <div class="sf-governance-field"><label for="sf-governance-summary">Change Summary</label><textarea id="sf-governance-summary" class="sf-governance-control" rows="3" placeholder="Briefly describe the proposed change." data-gov-summary></textarea></div>
           <button class="sf-governance-reset" type="button" data-gov-reset>Reset Assessment</button>
@@ -369,6 +371,7 @@ export function renderGovernanceView(container, projects) {
   container.querySelector("[data-gov-reset]").addEventListener("click", reset);
   reset();
 
+  registerCurrencyRenderer(projectSelect, () => update(container, selected));
   return {
     saveArea: container.querySelector("[data-gov-save-area]"),
     getAssessment() {

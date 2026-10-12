@@ -1,5 +1,6 @@
+import { registerCurrencyRenderer } from "./currency-presentation.js";
 import {
-  formatCurrency,
+  formatDisplayCurrency,
   formatPercent,
   formatDate,
 } from "./formatters.js";
@@ -135,7 +136,7 @@ function createProjectKpis(project) {
       },
       {
         label: "Approved Budget",
-        value: formatCurrency(
+        value: formatDisplayCurrency(
           project.budgetBAC,
         ),
       },
@@ -197,25 +198,25 @@ function createProjectDetailGrid(project) {
       [
         [
           "Budget at Completion (BAC)",
-          formatCurrency(
+          formatDisplayCurrency(
             project.budgetBAC,
           ),
         ],
         [
           "Planned Value (PV)",
-          formatCurrency(
+          formatDisplayCurrency(
             project.plannedValuePV,
           ),
         ],
         [
           "Earned Value (EV)",
-          formatCurrency(
+          formatDisplayCurrency(
             project.earnedValueEV,
           ),
         ],
         [
           "Actual Cost (AC)",
-          formatCurrency(
+          formatDisplayCurrency(
             project.actualCostAC,
           ),
         ],
@@ -295,6 +296,10 @@ export function renderProjectPerformance(
     createProjectKpis(project),
     createProjectDetailGrid(project),
   );
+  registerCurrencyRenderer(container, () => {
+    container.querySelector(".sf-kpi-grid")?.replaceWith(createProjectKpis(project));
+    container.querySelector(".sf-detail-grid")?.replaceWith(createProjectDetailGrid(project));
+  });
 }
 
 export function renderProjectNotFound(

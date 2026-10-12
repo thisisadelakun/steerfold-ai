@@ -1,4 +1,6 @@
-import { formatCurrency } from "./formatters.js";
+import { formatDisplayCurrency } from "./formatters.js";
+import { getCurrencyState } from "./currency-preferences.js";
+import { registerCurrencyRenderer } from "./currency-presentation.js";
 import { APP_CONFIG } from "./app-config.js";
 import { isAuthenticated, getCurrentUser } from "./auth-service.js";
 import { getMyGovernanceRoles } from "./governance-role-service.js";
@@ -40,8 +42,8 @@ function isAuthorizationError(message) {
 
 function formatMoney(value, { signed = false } = {}) {
   if (!Number.isFinite(value)) return EMPTY;
-  if (signed && value > 0) return `+${formatCurrency(value)}`;
-  return formatCurrency(value);
+  if (signed && value > 0) return `+${formatDisplayCurrency(value)}`;
+  return formatDisplayCurrency(value);
 }
 
 function formatDateTime(value) {
@@ -128,6 +130,8 @@ function openWorkflowDialog({
   const heading = document.createElement("h2");
   const copy = document.createElement("p");
   const detailList = document.createElement("dl");
+  const currencyContext = document.createElement("p");
+  const monetaryRows = [];
   const noteField = document.createElement("div");
   const note = document.createElement("textarea");
   const noteHelp = document.createElement("small");
@@ -156,7 +160,8 @@ function openWorkflowDialog({
     const term = document.createElement("dt");
     const description = document.createElement("dd");
     term.textContent = label;
-    description.textContent = value ?? EMPTY;
+    description.textContent = typeof value === "function" ? value() : value ?? EMPTY;
+    if (typeof value === "function") monetaryRows.push([description, value]);
     row.append(term, description);
     detailList.append(row);
   });
@@ -186,7 +191,15 @@ function openWorkflowDialog({
   confirm.textContent = confirmText;
   confirm.className = danger ? "sf-governance-dialog-danger" : "sf-governance-dialog-confirm";
   actions.append(cancel, confirm);
-  dialog.append(heading, copy, detailList, noteField, warningElement, error, actions);
+  currencyContext.className = "sf-governance-permission-note";
+  currencyContext.hidden = !monetaryRows.length;
+  const refreshMoney = () => {
+    monetaryRows.forEach(([element, format]) => { element.textContent = format(); });
+    const state = getCurrencyState();
+    currencyContext.textContent = `Financial readouts use ${state.activeCurrency}. Baseline operations use ${state.organizationCurrency}.`;
+  };
+  refreshMoney();
+  dialog.append(heading, copy, detailList, currencyContext, noteField, warningElement, error, actions);
   overlay.append(dialog);
 
   function close() {
@@ -232,6 +245,7 @@ function openWorkflowDialog({
   });
 
   document.body.append(overlay);
+  if (monetaryRows.length) registerCurrencyRenderer(dialog, refreshMoney);
   restoreBackground = makeBackgroundInert(overlay);
   document.addEventListener("keydown", onKeydown);
   window.addEventListener("auth:changed", onAuthChange);
@@ -634,9 +648,9 @@ export function initGovernanceWorkflow({
       details: isApproval ? [
         ["Request", request.requestId],
         ["Project", projectName(request)],
-        ["Current BAC", formatMoney(request.originalBac)],
-        ["Budget Change", formatMoney(request.budgetChangeAmount, { signed: true })],
-        ["Proposed BAC", formatMoney(request.proposedBac)],
+        ["Current BAC", () => formatMoney(request.originalBac)],
+        ["Budget Change", () => formatMoney(request.budgetChangeAmount, { signed: true })],
+        ["Proposed BAC", () => formatMoney(request.proposedBac)],
       ] : [["Request", request.requestId], ["Project", projectName(request)]],
       noteLabel: isDecision ? "Decision Note (optional)" : "Transition Note (optional)",
       warning: isApproval
@@ -727,9 +741,9 @@ export function initGovernanceWorkflow({
       details: [
         ["Request ID", request.requestId],
         ["Project", projectName(request)],
-        ["Current Project BAC", formatMoney(currentBac)],
-        ["Approved Budget Change", formatMoney(request.budgetChangeAmount, { signed: true })],
-        ["New Project BAC", formatMoney(request.proposedBac)],
+        ["Current Project BAC", () => formatMoney(currentBac)],
+        ["Approved Budget Change", () => formatMoney(request.budgetChangeAmount, { signed: true })],
+        ["New Project BAC", () => formatMoney(request.proposedBac)],
       ],
       noteLabel: "Application Note",
       noteHelper: "Optional note describing the baseline implementation.",
@@ -1301,6 +1315,7 @@ export function initGovernanceWorkflow({
     if (state.authenticated) await Promise.all([loadRoles(), loadRequests()]);
   }
 
+  registerCurrencyRenderer(container, render);
   render();
   if (state.authenticated) Promise.all([loadRoles(), loadRequests()]);
 

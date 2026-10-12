@@ -134,6 +134,7 @@
             <p class="sf-eyebrow">AI-Enabled Project Portfolio Intelligence</p>
             <h1 data-page-title>Portfolio Overview</h1>
             <p data-page-subtitle>Monitor performance, budget, risk and portfolio health.</p>
+            <p class="sf-print-currency-context" data-print-currency-context></p>
             <p class="sf-page-supporting-line" data-page-supporting-line hidden></p>
             <span class="sf-governance-badge" data-governance-badge hidden>Simulation</span>
           </div>
@@ -142,10 +143,10 @@
             <div
               class="sf-currency-indicator"
               data-currency-indicator
-              aria-label="Display currency: CAD"
+              aria-label="Display currency preference"
             >
               <span class="sf-currency-label">Currency ·</span>
-              CAD
+              &mdash;
             </div>
 
           </div>
@@ -162,6 +163,21 @@
                 <label><input type="radio" name="sf-theme" value="system"><span>System</span></label>
               </div>
               <p class="sf-theme-feedback" role="status" data-theme-feedback></p>
+            </fieldset>
+            <fieldset class="sf-currency-preferences">
+              <legend>Currency</legend>
+              <div class="sf-currency-base"><span>Organization Currency</span><strong data-organization-currency>&mdash;</strong></div>
+              <p>Project budgets, EVM calculations and governance records use your organization's currency.</p>
+              <label for="sf-display-currency">Display Currency</label>
+              <select id="sf-display-currency" aria-describedby="sf-currency-explanation sf-currency-status" data-display-currency>
+                <option value="CAD">CAD &mdash; Canadian Dollar</option>
+                <option value="USD">USD &mdash; US Dollar</option>
+                <option value="GBP">GBP &mdash; British Pound</option>
+                <option value="EUR">EUR &mdash; Euro</option>
+              </select>
+              <p id="sf-currency-explanation">Display currency changes how financial values are shown. It does not change stored project budgets or governance records.</p>
+              <div id="sf-currency-status" class="sf-fx-status" role="status" data-currency-status><p>Financial values use the organization's currency.</p></div>
+              <div class="sf-currency-preview" data-currency-preview></div>
             </fieldset>
           </section>
           <section class="sf-kpi-grid" aria-label="Portfolio key performance indicators" data-portfolio-overview data-portfolio-kpis>

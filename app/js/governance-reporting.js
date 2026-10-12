@@ -1,4 +1,4 @@
-import { formatCurrency } from "./formatters.js";
+import { formatDisplayCurrency } from "./formatters.js";
 import { APP_CONFIG } from "./app-config.js";
 
 const EMPTY = "\u2014";
@@ -22,7 +22,7 @@ function projectLabel(request, projectNames) {
 
 function money(value, signed = false) {
   if (!Number.isFinite(value)) return EMPTY;
-  return `${signed && value > 0 ? "+" : ""}${formatCurrency(value)}`;
+  return `${signed && value > 0 ? "+" : ""}${formatDisplayCurrency(value)}`;
 }
 
 function date(value) {

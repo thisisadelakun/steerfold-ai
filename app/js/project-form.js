@@ -1,3 +1,5 @@
+import { APP_CONFIG } from "./app-config.js";
+
 const MODAL_ID = "sf-project-form-modal";
 
 const SELECT_OPTIONS = {
@@ -245,7 +247,8 @@ function createField(definition, project) {
   wrapper.className = "sf-project-form-field";
 
   label.htmlFor = fieldId;
-  label.textContent = definition.label;
+  label.textContent = ["budgetBAC", "plannedValuePV", "earnedValueEV", "actualCostAC"].includes(definition.name)
+    ? `${definition.label} (${APP_CONFIG.portfolio.currencyCode})` : definition.label;
 
   if (definition.type === "select") {
     control = document.createElement("select");
