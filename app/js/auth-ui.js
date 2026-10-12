@@ -6,6 +6,27 @@ import {
 } from "./auth-service.js";
 
 const PANEL_ID = "sf-auth-panel";
+const WORKFLOW_ROLE_LABELS = {
+  requester: "Requester",
+  reviewer: "Reviewer",
+  approver: "Approver",
+  baseline_controller: "Baseline Controller",
+};
+let identityUserId = null;
+let identityRoles = null;
+
+function emailInitial() {
+  const email = getCurrentUser()?.email;
+  return typeof email === "string" ? [...email.trim().toUpperCase()][0] || "?" : "?";
+}
+
+function accountLabel() {
+  if (!isAuthenticated()) return "Sign In";
+  if (identityUserId !== getCurrentUser()?.id || !identityRoles) return "Account";
+  const roles = [...new Set(identityRoles)];
+  if (roles.includes("governance_admin")) return "Admin";
+  return roles.length === 1 ? WORKFLOW_ROLE_LABELS[roles[0]] || "Account" : "Account";
+}
 
 function createPanel() {
   const existingPanel = document.getElementById(PANEL_ID);
@@ -58,17 +79,17 @@ function createField(
   };
 }
 
-function createAuthMark() {
+function createAuthMark(initial = null) {
   const mark = document.createElement("span");
 
-  mark.className = "sf-auth-mark";
+  mark.className = initial ? "sf-auth-mark sf-account-avatar" : "sf-auth-mark";
   mark.setAttribute("aria-hidden", "true");
-  mark.textContent = "S";
+  mark.textContent = initial || "S";
 
   return mark;
 }
 
-function createHeader(titleText, copyText = "") {
+function createHeader(titleText, copyText = "", initial = null) {
   const header = document.createElement("div");
   header.className = "sf-auth-panel-header";
 
@@ -77,7 +98,7 @@ function createHeader(titleText, copyText = "") {
   title.textContent = titleText;
 
   header.append(
-    createAuthMark(),
+    createAuthMark(initial),
     title,
   );
 
@@ -283,8 +304,9 @@ function renderLoggedIn(panel) {
   panel.replaceChildren();
 
   const header = createHeader(
-    "Admin",
+    accountLabel(),
     "You can create, edit and delete project records.",
+    emailInitial(),
   );
 
   const user = getCurrentUser();
@@ -526,7 +548,7 @@ function closePanel(
 function updateLauncherState(button) {
   const isSignedIn = isAuthenticated();
   const labelText =
-    isSignedIn ? "Admin" : "Admin Access";
+    accountLabel();
   const label = button.querySelector(
     ".sf-sidebar-account-label",
   );
@@ -536,6 +558,20 @@ function updateLauncherState(button) {
   }
 
   button.title = labelText;
+
+  const icon = button.querySelector(".sf-button-icon");
+  if (icon) icon.toggleAttribute("hidden", isSignedIn);
+  let avatar = button.querySelector(".sf-account-avatar");
+  if (!avatar && isSignedIn) {
+    avatar = document.createElement("span");
+    avatar.className = "sf-account-avatar";
+    avatar.setAttribute("aria-hidden", "true");
+    button.prepend(avatar);
+  }
+  if (avatar) {
+    avatar.hidden = !isSignedIn;
+    avatar.textContent = isSignedIn ? emailInitial() : "";
+  }
 }
 
 export function initAuthUI() {
@@ -559,6 +595,18 @@ export function initAuthUI() {
     "true";
 
   const panel = createPanel();
+
+  window.addEventListener("governance:roles-changed", (event) => {
+    if (!isAuthenticated() || event.detail?.userId !== getCurrentUser()?.id) return;
+    identityUserId = event.detail.userId;
+    identityRoles = event.detail.status === "ready" && Array.isArray(event.detail.roles)
+      ? event.detail.roles : null;
+    updateLauncherState(button);
+    if (!panel.hidden) {
+      const title = panel.querySelector(".sf-auth-panel-title");
+      if (title) title.textContent = accountLabel();
+    }
+  });
 
   updateLauncherState(button);
 
@@ -655,6 +703,8 @@ export function initAuthUI() {
   window.addEventListener(
     "auth:changed",
     (event) => {
+      identityUserId = null;
+      identityRoles = null;
       updateLauncherState(button);
 
       if (panel.hidden) {

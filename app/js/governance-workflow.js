@@ -421,6 +421,7 @@ export function initGovernanceWorkflow({
     const rolesVersion = ++state.rolesVersion;
     state.roles.clear();
     state.rolesStatus = "loading";
+    publishRoleIdentity();
     render();
     try {
       const roles = await getMyGovernanceRoles();
@@ -435,7 +436,14 @@ export function initGovernanceWorkflow({
       state.editingId = null;
       assessment.setProjectLocked(false);
     }
+    publishRoleIdentity();
     render();
+  }
+
+  function publishRoleIdentity() {
+    window.dispatchEvent(new CustomEvent("governance:roles-changed", {
+      detail: { userId: state.userId, status: state.rolesStatus, roles: [...state.roles] },
+    }));
   }
 
   function renderPermissions(host) {

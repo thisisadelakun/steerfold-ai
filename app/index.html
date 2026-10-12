@@ -43,6 +43,7 @@
     >
     <title>Steerfold AI | Portfolio Overview</title>
     <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+    <script src="js/theme-preferences.js"></script>
     <link rel="stylesheet" href="styles.css">
   </head>
   <body>
@@ -70,11 +71,26 @@
         </button>
 
         <nav class="sf-nav" aria-label="Portfolio sections">
-          <a class="sf-nav-link sf-nav-link--active" href="./" aria-current="page" data-nav-target="portfolio">Portfolio</a>
-          <a class="sf-nav-link" href="./#projects" data-nav-target="projects">Projects</a>
-          <a class="sf-nav-link" href="./#budget" data-nav-target="future">Budget &amp; EVM</a>
-          <a class="sf-nav-link" href="./#forecasting" data-nav-target="future">Forecasting</a>
-          <a class="sf-nav-link" href="./#decision-support" data-nav-target="future">Decision Support</a>
+          <a class="sf-nav-link sf-nav-link--portfolio sf-nav-link--active" href="./" aria-label="Portfolio" title="Portfolio" aria-current="page" data-nav-target="portfolio">
+            <svg class="sf-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="3" width="7" height="7" rx="1.5"></rect><rect x="14" y="3" width="7" height="7" rx="1.5"></rect><rect x="3" y="14" width="7" height="7" rx="1.5"></rect><rect x="14" y="14" width="7" height="7" rx="1.5"></rect></svg>
+            <span class="sf-nav-label">Portfolio</span>
+          </a>
+          <a class="sf-nav-link sf-nav-link--projects" href="./#projects" aria-label="Projects" title="Projects" data-nav-target="projects">
+            <svg class="sf-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 7V5a2 2 0 0 1 2-2h5l2 3h7a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7Z"></path><path d="M3 10h18"></path></svg>
+            <span class="sf-nav-label">Projects</span>
+          </a>
+          <a class="sf-nav-link sf-nav-link--budget" href="./#budget" aria-label="Budget &amp; EVM" title="Budget &amp; EVM" data-nav-target="future">
+            <svg class="sf-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="18" rx="2"></rect><path d="M8 7h8M8 11h1M12 11h1M16 11h.1M8 15h1M12 15h1M16 15v3M8 18h1M12 18h1"></path></svg>
+            <span class="sf-nav-label">Budget &amp; EVM</span>
+          </a>
+          <a class="sf-nav-link sf-nav-link--forecasting" href="./#forecasting" aria-label="Forecasting" title="Forecasting" data-nav-target="future">
+            <svg class="sf-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M3 3v18h18M6 15l5-5 4 3 6-7M16 6h5v5"></path></svg>
+            <span class="sf-nav-label">Forecasting</span>
+          </a>
+          <a class="sf-nav-link sf-nav-link--decision" href="./#decision-support" aria-label="Decision Support" title="Decision Support" data-nav-target="future">
+            <svg class="sf-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"></circle><path d="m16 8-2.5 5.5L8 16l2.5-5.5L16 8Z"></path></svg>
+            <span class="sf-nav-label">Decision Support</span>
+          </a>
           <a class="sf-nav-link sf-nav-link--governance" href="./#governance" aria-label="Governance" title="Governance" data-nav-target="governance">
             <svg class="sf-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M12 3 4 7v5c0 5 3.5 8 8 9 4.5-1 8-4 8-9V7l-8-4Z"></path><path d="m9 12 2 2 4-4"></path></svg>
             <span class="sf-nav-label">Governance</span>
@@ -96,12 +112,12 @@
             </svg>
             <span class="sf-nav-label">Settings</span>
           </a>
-          <button class="sf-sidebar-account-button sf-icon-button" type="button" aria-label="Account controls" aria-labelledby="sf-sidebar-account-label" title="Admin Access" data-auth-launcher>
+          <button class="sf-sidebar-account-button sf-icon-button" type="button" aria-label="Account controls" aria-labelledby="sf-sidebar-account-label" title="Sign In" data-auth-launcher>
             <svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M20 21a8 8 0 0 0-16 0"></path>
               <circle cx="12" cy="8" r="4"></circle>
             </svg>
-            <span class="sf-sidebar-account-label" id="sf-sidebar-account-label">Admin Access</span>
+            <span class="sf-sidebar-account-label" id="sf-sidebar-account-label">Sign In</span>
           </button>
         </div>
       </aside>
@@ -138,6 +154,15 @@
         <main class="sf-main-content">
           <section data-settings-view aria-label="Settings" hidden>
             <p>Personalize how Steerfold looks and displays portfolio information.</p>
+            <fieldset class="sf-theme-preferences">
+              <legend>Appearance</legend>
+              <div class="sf-theme-choices">
+                <label><input type="radio" name="sf-theme" value="dark"><span>Dark</span></label>
+                <label><input type="radio" name="sf-theme" value="light"><span>Light</span></label>
+                <label><input type="radio" name="sf-theme" value="system"><span>System</span></label>
+              </div>
+              <p class="sf-theme-feedback" role="status" data-theme-feedback></p>
+            </fieldset>
           </section>
           <section class="sf-kpi-grid" aria-label="Portfolio key performance indicators" data-portfolio-overview data-portfolio-kpis>
             <article class="sf-kpi-card">
