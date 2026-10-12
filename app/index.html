@@ -89,6 +89,13 @@
         </nav>
 
         <div class="sf-sidebar-footer">
+          <a class="sf-nav-link sf-nav-link--settings" href="./#settings" aria-label="Settings" title="Settings" data-nav-target="settings">
+            <svg class="sf-nav-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+              <path d="M10 3h4l.4 2.4 1.7 1 2.3-.8 2 3.4-1.9 1.6v2.8l1.9 1.6-2 3.4-2.3-.8-1.7 1L14 21h-4l-.4-2.4-1.7-1-2.3.8-2-3.4 1.9-1.6v-2.8L3.6 9l2-3.4 2.3.8 1.7-1Z"></path>
+              <circle cx="12" cy="12" r="3"></circle>
+            </svg>
+            <span class="sf-nav-label">Settings</span>
+          </a>
           <button class="sf-sidebar-account-button sf-icon-button" type="button" aria-label="Account controls" aria-labelledby="sf-sidebar-account-label" title="Admin Access" data-auth-launcher>
             <svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
               <path d="M20 21a8 8 0 0 0-16 0"></path>
@@ -129,6 +136,9 @@
         </header>
 
         <main class="sf-main-content">
+          <section data-settings-view aria-label="Settings" hidden>
+            <p>Personalize how Steerfold looks and displays portfolio information.</p>
+          </section>
           <section class="sf-kpi-grid" aria-label="Portfolio key performance indicators" data-portfolio-overview data-portfolio-kpis>
             <article class="sf-kpi-card">
               <span class="sf-kpi-label">Total Projects</span>

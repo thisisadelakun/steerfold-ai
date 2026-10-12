@@ -45,6 +45,10 @@ export function getCurrentRoute() {
     return { view: "governance", projectId: null };
   }
 
+  if (url.hash === "#settings") {
+    return { view: "settings", projectId: null };
+  }
+
   if (url.hash === "#stakeholder-view") {
     return {
       view: "stakeholder-view",
@@ -162,6 +166,13 @@ export function pushGovernanceRoute() {
   url.searchParams.delete("project");
   url.hash = "governance";
   history.pushState({ view: "governance" }, "", buildRelativeUrl(url));
+}
+
+export function pushSettingsRoute() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("project");
+  url.hash = "settings";
+  history.pushState({ view: "settings" }, "", buildRelativeUrl(url));
 }
 
 export function pushStakeholderViewRoute() {

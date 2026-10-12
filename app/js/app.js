@@ -55,6 +55,7 @@ import {
   pushForecastingRoute,
   pushDecisionSupportRoute,
   pushGovernanceRoute,
+  pushSettingsRoute,
   pushStakeholderViewRoute,
   listenForRouteChanges,
 } from "./router.js";
@@ -263,6 +264,8 @@ const SteerfoldApp = {
     this.setupAuthChanges();
     initAuthUI();
     initOnboardingTour();
+    this.helpButton = this.accountArea?.querySelector(".sf-tour-button");
+    this.updateHeaderActionsForView(getCurrentRoute().view);
     this.loadDashboard();
   },
 
@@ -286,6 +289,7 @@ const SteerfoldApp = {
       ".sf-page-header .sf-account-area",
     );
     this.mainArea = document.querySelector(".sf-main-area");
+    this.settingsView = document.querySelector("[data-settings-view]");
 
     this.portfolioOverviewViews = document.querySelectorAll(
       "[data-portfolio-overview]",
@@ -1612,9 +1616,35 @@ renderRouteFromUrl() {
     return;
   }
 
+  if (route.view === "settings") {
+    this.showSettingsView();
+    return;
+  }
+
   this.showPortfolioView({
     activeArea: "Portfolio",
   });
+},
+
+showSettingsView() {
+  this.setDefaultPageHeaderContext();
+  this.state.currentProjectId = null;
+  this.pageTitle.textContent = "Settings";
+  this.pageSubtitle.textContent = "Application preferences.";
+  this.setPortfolioContextVisibility(false);
+  [
+    ...this.portfolioOverviewViews,
+    ...this.projectsViews,
+    this.projectDetail,
+    this.budgetView,
+    this.forecastingView,
+    this.decisionSupportView,
+    this.governanceView,
+    this.stakeholderView,
+  ].forEach((view) => { if (view) view.hidden = true; });
+  this.setNavigationArea("Settings");
+  this.renderProjectsPageActions();
+  this.mainArea.scrollTop = 0;
 },
 
   getProjectById(projectId) {
@@ -2887,6 +2917,10 @@ renderProjectDetail(project) {
       event.preventDefault();
       pushGovernanceRoute();
       this.renderRouteFromUrl();
+    } else if (target === "settings") {
+      event.preventDefault();
+      pushSettingsRoute();
+      this.renderRouteFromUrl();
     }
 
     if (this.isSmallScreen()) {
@@ -2906,7 +2940,25 @@ renderProjectDetail(project) {
     });
   },
 
+  updateHeaderActionsForView(view) {
+    const sharedViews = ["portfolio", "budget", "forecasting", "decision-support", "governance", "stakeholder-view"];
+    if (this.exportControl) this.exportControl.hidden = !sharedViews.includes(view) && view !== "project";
+    if (this.helpButton) this.helpButton.hidden = !sharedViews.includes(view);
+  },
+
   setNavigationArea(areaName) {
+    const views = {
+      Portfolio: "portfolio",
+      Projects: "projects",
+      "Budget & EVM": "budget",
+      Forecasting: "forecasting",
+      "Decision Support": "decision-support",
+      Governance: "governance",
+      "Stakeholder View": "stakeholder-view",
+      Settings: "settings",
+    };
+    this.updateHeaderActionsForView(this.state.currentProjectId ? "project" : views[areaName]);
+    if (this.settingsView) this.settingsView.hidden = areaName !== "Settings";
     this.navLinks.forEach((link) => {
       const isActive =
         link.textContent.trim() ===
