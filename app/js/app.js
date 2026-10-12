@@ -89,6 +89,10 @@ import { isAuthenticated } from "./auth-service.js";
 import { APP_CONFIG } from "./app-config.js";
 import { getCurrencyState, setDisplayCurrency, subscribeCurrencyChanges, refreshCurrencyRate } from "./currency-preferences.js";
 import { registerCurrencyRenderer } from "./currency-presentation.js";
+import {
+  EXPLORER_QUICK_VIEWS, EXPLORER_BUDGET_RANGES,
+  getExplorerOptions, filterExplorerProjects,
+} from "./portfolio-explorer.js";
 
 function isPlainLeftClick(event) {
   return (
@@ -241,6 +245,11 @@ const SteerfoldApp = {
   projectFilters: {
     priority: "all",
     resourceDemand: "all",
+    manager: "all",
+    category: "all",
+    risk: "all",
+    budget: "all",
+    quickView: "all",
   },
 
   portfolioChartSelection: "risk-completion",
@@ -782,46 +791,171 @@ const SteerfoldApp = {
   },
 
   setupProjectFilters() {
-    if (!this.filterForm) {
-      return;
+    if (!this.filterForm) return;
+    const header = this.projectsSection.querySelector(".sf-section-header");
+    const quickViews = document.createElement("div");
+    quickViews.className = "sf-explorer-quick-views";
+    quickViews.setAttribute("role", "group");
+    quickViews.setAttribute("aria-label", "Quick Views");
+    this.explorerQuickButtons = new Map();
+    EXPLORER_QUICK_VIEWS.forEach(([key, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = label;
+      button.title = key === "over-budget" ? "Forecast exceeds approved budget (VAC < 0)"
+        : key === "behind-schedule" ? "Schedule performance index is below target (SPI < 1)"
+        : key === "high-risk" ? `Risk score above ${APP_CONFIG.portfolio.riskScoreBands.mediumMax}/25`
+        : key === "ending-soon" ? "Ends within 60 days of the selected reference date" : label;
+      button.addEventListener("click", () => {
+        if (key === "all") this.clearProjectFilters();
+        else {
+          this.projectFilters.quickView = key;
+          this.resetProjectPagination();
+          this.applyFilters();
+        }
+      });
+      this.explorerQuickButtons.set(key, button);
+      quickViews.append(button);
+    });
+    const panel = document.createElement("details");
+    panel.className = "sf-explorer-filter-panel";
+    panel.open = window.matchMedia("(min-width: 721px)").matches;
+    const summary = document.createElement("summary");
+    summary.textContent = "Filters";
+    panel.append(summary, this.filterForm);
+    this.filterForm.classList.add("sf-explorer-controls");
+    [this.searchInput, this.statusFilter].forEach((control) => {
+      const label = this.filterForm.querySelector(`label[for="${control.id}"]`);
+      const field = document.createElement("div");
+      field.className = "sf-project-filter-field";
+      label.classList.remove("sf-visually-hidden");
+      field.append(label, control);
+      this.filterForm.append(field);
+    });
+    this.searchInput.placeholder = "ID, project, manager or category";
+    this.explorerFilterControls = new Map();
+    const definitions = [
+      ["priority", "Strategic Priority", "All Priorities", []],
+      ["resourceDemand", "Resource Demand", "All Resource Demand", []],
+      ["manager", "Project Manager", "All Managers", []],
+      ["category", "Business Unit / Category", "All Business Units", []],
+      ["risk", "Risk", "All Risk", [
+        { key: "Low", label: `Low (0-${APP_CONFIG.portfolio.riskScoreBands.lowMax})` },
+        { key: "Medium", label: `Medium (${APP_CONFIG.portfolio.riskScoreBands.lowMax + 1}-${APP_CONFIG.portfolio.riskScoreBands.mediumMax})` },
+        { key: "High", label: `High (${APP_CONFIG.portfolio.riskScoreBands.mediumMax + 1}-25)` },
+      ]],
+      ["budget", `Budget (${APP_CONFIG.portfolio.currencyCode})`, "All Budgets", EXPLORER_BUDGET_RANGES],
+    ];
+    definitions.forEach(([key, label, allLabel, options]) => {
+      const field = this.createProjectFilter({
+        id: `project-${key}-filter`, label, className: "", allLabel, options,
+        onChange: (value) => { this.projectFilters[key] = value; },
+      });
+      this.explorerFilterControls.set(key, field.querySelector("select"));
+      this.filterForm.append(field);
+    });
+    const referenceField = document.createElement("label");
+    referenceField.className = "sf-project-filter-field";
+    const referenceLabel = document.createElement("span");
+    referenceLabel.textContent = "Ending Soon reference date";
+    this.explorerReferenceDate = document.createElement("input");
+    this.explorerReferenceDate.type = "date";
+    this.explorerReferenceDate.className = "sf-project-filter";
+    const today = new Date();
+    this.explorerReferenceDate.value = APP_CONFIG.portfolio.reportingDate
+      || `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    this.explorerReferenceDate.addEventListener("change", () => {
+      this.resetProjectPagination();
+      this.applyFilters();
+    });
+    referenceField.append(referenceLabel, this.explorerReferenceDate);
+    this.explorerReferenceField = referenceField;
+    this.filterForm.append(referenceField);
+    this.explorerSummary = document.createElement("div");
+    this.explorerSummary.className = "sf-explorer-filter-summary";
+    this.explorerSummary.setAttribute("aria-label", "Active filters");
+    header.after(quickViews, panel, this.explorerSummary);
+  },
+
+  refreshExplorerOptions() {
+    const fields = { priority: "strategicPriority", resourceDemand: "resourceDemand", manager: "projectManager", category: "category" };
+    Object.entries(fields).forEach(([key, field]) => {
+      const select = this.explorerFilterControls?.get(key);
+      if (!select) return;
+      let values = getExplorerOptions(this.state.projects, field);
+      if (key === "priority" || key === "resourceDemand") {
+        const ranks = { High: 3, Medium: 2, Low: 1 };
+        values = values.sort((a, b) => (ranks[b] ?? 0) - (ranks[a] ?? 0));
+      }
+      while (select.options.length > 1) select.remove(1);
+      values.forEach((value) => {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = value;
+        select.append(option);
+      });
+      if (!values.includes(this.projectFilters[key])) this.projectFilters[key] = "all";
+      select.value = this.projectFilters[key];
+    });
+  },
+
+  clearProjectFilters(key = null) {
+    if (!key || key === "search") this.searchInput.value = "";
+    if (!key || key === "status") this.statusFilter.value = "";
+    Object.keys(this.projectFilters).forEach((field) => {
+      if (!key || key === field) {
+        this.projectFilters[field] = "all";
+        const control = this.explorerFilterControls?.get(field);
+        if (control) control.value = "all";
+      }
+    });
+    this.resetProjectPagination();
+    this.applyFilters();
+    if (key || document.activeElement?.isConnected === false) {
+      const control = key === "status" ? this.statusFilter
+        : key === "quickView" ? this.explorerQuickButtons?.get("all")
+        : this.explorerFilterControls?.get(key) ?? this.searchInput;
+      control?.focus();
     }
+  },
 
-    const priorityFilter =
-      this.createProjectFilter({
-        id: "project-priority-filter",
-        label: "Strategic Priority",
-        className: "sf-project-priority-filter",
-        allLabel: "All Priorities",
-        options: [
-          "High",
-          "Medium",
-          "Low",
-        ],
-        onChange: (value) => {
-          this.projectFilters.priority = value;
-        },
-      });
-
-    const resourceFilter =
-      this.createProjectFilter({
-        id: "project-resource-filter",
-        label: "Resource Demand",
-        className: "sf-project-resource-filter",
-        allLabel: "All Resource Demand",
-        options: [
-          "High",
-          "Medium",
-          "Low",
-        ],
-        onChange: (value) => {
-          this.projectFilters.resourceDemand = value;
-        },
-      });
-
-    this.filterForm.append(
-      priorityFilter,
-      resourceFilter,
-    );
+  renderExplorerSummary() {
+    if (!this.explorerSummary) return;
+    this.explorerSummary.replaceChildren();
+    this.explorerQuickButtons.forEach((button, key) => {
+      button.setAttribute("aria-pressed", String(key === this.projectFilters.quickView));
+    });
+    this.explorerReferenceField.hidden = this.projectFilters.quickView !== "ending-soon";
+    const filters = [];
+    if (this.searchInput.value.trim()) filters.push(["search", `Search: ${this.searchInput.value.trim()}`]);
+    if (this.statusFilter.value) filters.push(["status", `Status: ${this.statusFilter.value}`]);
+    const labels = { priority: "Priority", resourceDemand: "Resource", manager: "Manager", category: "Category", risk: "Risk", budget: `Budget (${APP_CONFIG.portfolio.currencyCode})` };
+    Object.entries(labels).forEach(([key, label]) => {
+      if (this.projectFilters[key] !== "all") {
+        const select = this.explorerFilterControls.get(key);
+        filters.push([key, `${label}: ${select.selectedOptions[0].textContent}`]);
+      }
+    });
+    if (this.projectFilters.quickView !== "all") {
+      const label = EXPLORER_QUICK_VIEWS.find(([key]) => key === this.projectFilters.quickView)[1];
+      filters.push(["quickView", `Quick View: ${label}${this.projectFilters.quickView === "ending-soon" ? ` (60 days from ${this.explorerReferenceDate.value || "no date"})` : ""}`]);
+    }
+    filters.forEach(([key, label]) => {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = `${label} \u00d7`;
+      button.setAttribute("aria-label", `Remove ${label} filter`);
+      button.addEventListener("click", () => this.clearProjectFilters(key));
+      this.explorerSummary.append(button);
+    });
+    this.explorerSummary.hidden = !filters.length;
+    if (filters.length) {
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.textContent = "Clear All";
+      clear.addEventListener("click", () => this.clearProjectFilters());
+      this.explorerSummary.append(clear);
+    }
   },
 
   createProjectFilter({
@@ -844,7 +978,6 @@ const SteerfoldApp = {
     wrapper.className = "sf-project-filter-field";
     wrapper.htmlFor = id;
 
-    labelText.className = "sf-visually-hidden";
     labelText.textContent = label;
 
     select.id = id;
@@ -860,8 +993,8 @@ const SteerfoldApp = {
       const option =
         document.createElement("option");
 
-      option.value = optionValue;
-      option.textContent = optionValue;
+      option.value = typeof optionValue === "string" ? optionValue : optionValue.key;
+      option.textContent = typeof optionValue === "string" ? optionValue : optionValue.label;
 
       select.append(option);
     });
@@ -950,10 +1083,7 @@ const SteerfoldApp = {
       "polite",
     );
 
-    header.insertBefore(
-      resultCount,
-      this.filterForm,
-    );
+    header.append(resultCount);
 
     this.projectResultCount = resultCount;
     this.updateProjectResultCount(0);
@@ -1247,6 +1377,7 @@ const SteerfoldApp = {
 
       this.state.projects = projects;
       this.state.filteredProjects = projects;
+      this.refreshExplorerOptions();
 
       this.setDataSourceNoticeVisibility(
         dataSource === "csv-fallback",
@@ -1395,58 +1526,12 @@ const SteerfoldApp = {
   },
 
   applyFilters() {
-    const searchTerm = (
-      this.searchInput?.value ?? ""
-    )
-      .trim()
-      .toLowerCase();
-
-    const selectedStatus =
-      this.statusFilter?.value ?? "";
-
-    const selectedPriority =
-      this.projectFilters.priority;
-
-    const selectedResourceDemand =
-      this.projectFilters.resourceDemand;
-
-    this.state.filteredProjects =
-      this.state.projects.filter((project) => {
-        const searchableFields = [
-          project.projectName,
-          project.projectManager,
-          project.projectType,
-          project.projectId,
-        ];
-
-        const matchesSearch =
-          !searchTerm ||
-          searchableFields.some((field) => {
-            return String(field)
-              .toLowerCase()
-              .includes(searchTerm);
-          });
-
-        const matchesStatus =
-          !selectedStatus ||
-          project.projectStatus === selectedStatus;
-
-        const matchesPriority =
-          selectedPriority === "all" ||
-          project.strategicPriority === selectedPriority;
-
-        const matchesResourceDemand =
-          selectedResourceDemand === "all" ||
-          project.resourceDemand ===
-            selectedResourceDemand;
-
-        return (
-          matchesSearch &&
-          matchesStatus &&
-          matchesPriority &&
-          matchesResourceDemand
-        );
-      });
+    this.state.filteredProjects = filterExplorerProjects(this.state.projects, {
+      ...this.projectFilters,
+      search: this.searchInput?.value ?? "",
+      status: this.statusFilter?.value ?? "",
+    }, this.explorerReferenceDate?.value);
+    this.renderExplorerSummary();
 
     this.updateProjectResultCount(
       this.state.filteredProjects.length,
@@ -1475,7 +1560,7 @@ const SteerfoldApp = {
     }
 
     this.projectResultCount.textContent =
-      `${count} ${count === 1 ? "project" : "projects"}`;
+      `${count}${count !== this.state.projects.length ? ` of ${this.state.projects.length}` : ""} ${count === 1 && count === this.state.projects.length ? "project" : "projects"}`;
   },
 
   resetProjectPagination() {
@@ -1565,6 +1650,8 @@ const SteerfoldApp = {
       1,
       Math.ceil(totalItems / pageSize),
     );
+
+    if (this.projectPagination.currentPage > totalPages) this.projectPagination.currentPage = 1;
 
     if (totalItems === 0) {
       this.projectPagination.currentPage = 1;
@@ -2801,6 +2888,12 @@ const insights = [
       this.renderTableMessage(
         "No projects match the current filters.",
       );
+      const clear = document.createElement("button");
+      clear.type = "button";
+      clear.className = "sf-explorer-clear";
+      clear.textContent = "Clear Filters";
+      clear.addEventListener("click", () => this.clearProjectFilters());
+      this.tableBody.querySelector("td").append(document.createElement("br"), clear);
 
       return;
     }
