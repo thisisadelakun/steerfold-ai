@@ -255,6 +255,16 @@ function assessmentPayload(assessment) {
   };
 }
 
+function assessmentSnapshot(current) {
+  if (!current?.project) return null;
+  const payload = assessmentPayload(current);
+  return JSON.stringify({
+    ...payload,
+    budgetChangeAmount: Number(payload.budgetChangeAmount),
+    changeSummary: (payload.changeSummary ?? "").replace(/\r\n?/g, "\n").trim(),
+  });
+}
+
 export function initGovernanceWorkflow({
   container,
   projects,
@@ -275,6 +285,7 @@ export function initGovernanceWorkflow({
     historyLoading: false,
     pending: false,
     editingId: null,
+    savedAssessment: null,
     error: "",
     success: initialSuccess,
     authVersion: 0,
@@ -296,6 +307,27 @@ export function initGovernanceWorkflow({
   function owningRequester(request) {
     return hasRole("requester") && ownsRequest(request);
   }
+
+  function assessmentIsSaved() {
+    return Boolean(state.savedAssessment
+      && state.savedAssessment.snapshot === assessmentSnapshot(assessment.getAssessment()));
+  }
+
+  const assessmentHost = assessment.saveArea?.parentElement;
+  const assessmentInputs = "[data-gov-project], [data-gov-amount], [data-gov-type], [data-gov-summary], [data-dimension]";
+  function handleAssessmentChange(event) {
+    const reset = event.type === "click" && event.target.closest("[data-gov-reset]");
+    if (!reset && (event.type === "click" || !event.target.matches(assessmentInputs))) return;
+    if (state.savedAssessment && (reset || !assessmentIsSaved())) {
+      state.savedAssessment = null;
+      render();
+    }
+  }
+  assessmentHost?.querySelectorAll(assessmentInputs).forEach((control) => {
+    control.addEventListener("input", handleAssessmentChange);
+    control.addEventListener("change", handleAssessmentChange);
+  });
+  assessmentHost?.querySelector("[data-gov-reset]")?.addEventListener("click", handleAssessmentChange);
 
   async function loadRoles() {
     if (!state.authenticated) return;
@@ -804,11 +836,12 @@ export function initGovernanceWorkflow({
     const canSave = state.editingId
       ? owningRequester(selectedRequest()) && selectedRequest()?.status === "Draft"
       : hasRole("requester");
+    const draftSaved = !state.editingId && assessmentIsSaved();
     if (canSave) {
       const save = document.createElement("button");
       save.type = "button";
-      save.disabled = state.pending || state.loading;
-      save.textContent = state.editingId ? "Save Draft Changes" : "Save as Draft";
+      save.disabled = state.pending || state.loading || draftSaved;
+      save.textContent = state.editingId ? "Save Draft Changes" : draftSaved ? "Draft Saved" : "Save as Draft";
       save.addEventListener("click", state.editingId ? saveDraftChanges : saveDraft);
       primaryActions.append(save);
     } else {
@@ -843,7 +876,9 @@ export function initGovernanceWorkflow({
       title.textContent = "Save Current Assessment";
       description.textContent = state.editingId
         ? "Update the persistent Draft Change Request from the assessment above."
-        : "Create a persistent Draft Change Request from the assessment above.";
+        : draftSaved && canSave
+          ? `Saved as ${state.savedAssessment.requestId}. Modify the assessment to create another Draft.`
+          : "Create a persistent Draft Change Request from the assessment above.";
       copy.append(title, description);
       const nearbyFeedback = feedback.cloneNode(true);
       nearbyFeedback.removeAttribute("aria-live");
@@ -1031,11 +1066,19 @@ export function initGovernanceWorkflow({
   }
 
   async function saveDraft() {
+    if (state.pending || state.loading || state.editingId || !hasRole("requester") || assessmentIsSaved()) return;
     const version = state.authVersion;
     try {
       const current = validateAssessment();
+      const snapshot = assessmentSnapshot(current);
       const created = await mutate(
-        () => createChangeRequest(assessmentPayload(current)),
+        async () => {
+          const request = await createChangeRequest(assessmentPayload(current));
+          if (version === state.authVersion) {
+            state.savedAssessment = { snapshot, requestId: request.requestId };
+          }
+          return request;
+        },
         null,
         (request) => `${request.requestId} saved as Draft.`,
       );

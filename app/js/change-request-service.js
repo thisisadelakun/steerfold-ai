@@ -94,11 +94,25 @@ async function getErrorMessage(response, fallbackMessage) {
       "Reviewer role is required for this Change Request action.",
       "Approver role is required for this Change Request action.",
       "Baseline Controller role is required to apply an approved budget change.",
+      "The Requester who created this Change Request cannot perform its governance review.",
+      "The Requester who created this Change Request cannot record its governance decision.",
+      "The Reviewer who started this review cannot record its governance decision.",
+      "The Requester who created this Change Request cannot apply its approved baseline change.",
+      "The Approver who recorded this governance decision cannot apply the approved baseline change.",
     ];
     const authorizationMessage = authorizationMessages.find(
       (message) => serverText.includes(message),
     );
     if (authorizationMessage) return authorizationMessage;
+
+    const actorConsistencyMessages = [
+      "Current review actor could not be verified.",
+      "Approval actor could not be verified.",
+    ];
+    const actorConsistencyMessage = actorConsistencyMessages.find(
+      (message) => serverText.includes(message),
+    );
+    if (actorConsistencyMessage) return actorConsistencyMessage;
 
     if (error?.code === "23503") {
       return "The selected project is no longer available.";
