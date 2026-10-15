@@ -1,0 +1,336 @@
+import { APP_CONFIG } from "./app-config.js";
+import { parseImportFile } from "./import-parser.js";
+import { IMPORT_FIELDS, suggestImportMappings, validateImportRows } from "./import-validation.js";
+
+const STEPS = ["Upload", "Map Columns", "Validate", "Preview"];
+const PAGE_SIZE = 25;
+
+function element(tag, text = "", className = "") {
+  const node = document.createElement(tag);
+  node.textContent = text;
+  node.className = className;
+  return node;
+}
+
+function button(text, handler, className = "") {
+  const node = element("button", text, className);
+  node.type = "button";
+  node.addEventListener("click", handler);
+  return node;
+}
+
+export function openProjectImport() {
+  if (document.getElementById("sf-project-import")) return;
+  const opener = document.activeElement;
+  const dialog = element("dialog", "", "sf-import-dialog");
+  dialog.id = "sf-project-import";
+  dialog.setAttribute("aria-labelledby", "sf-import-title");
+  dialog.setAttribute("aria-modal", "true");
+  const state = {
+    step: 0, reached: 0, parsed: null, source: null, sheet: "", mappings: [],
+    suggestions: [], results: null, percentMode: "percent", filter: "all", page: 1,
+    busy: false, error: "", discard: null,
+  };
+  const content = element("div", "", "sf-import-content");
+  const footer = element("div", "", "sf-import-actions");
+  const steps = element("ol", "", "sf-import-steps");
+  const status = element("p", "", "sf-import-status");
+  status.setAttribute("role", "status");
+  const error = element("p", "", "sf-import-error");
+  error.setAttribute("role", "alert");
+  const heading = element("h2", "Import Projects");
+  heading.id = "sf-import-title";
+  const context = element("p", `Local staging only. Financial inputs use ${APP_CONFIG.portfolio.currencyCode}. No records are written to the live portfolio.`, "sf-import-context");
+  dialog.append(heading, context, steps, status, error, content, footer);
+
+  function close() {
+    dialog.close();
+    dialog.remove();
+    state.parsed = null;
+    state.source = null;
+    state.results = null;
+    if (opener?.isConnected) opener.focus();
+  }
+
+  function confirmDiscard(action) {
+    if (state.busy) return;
+    if (!state.source) { action(); return; }
+    state.discard = action;
+    render();
+    footer.querySelector("button")?.focus();
+  }
+
+  function revalidate() {
+    state.results = state.source ? validateImportRows(state.source, state.mappings, state.percentMode) : null;
+    state.page = 1;
+  }
+
+  function selectSheet(name) {
+    const source = state.parsed.readSheet(name);
+    state.sheet = name;
+    state.source = source;
+    state.suggestions = suggestImportMappings(source.headers);
+    state.mappings = [...state.suggestions];
+    state.reached = 1;
+    state.step = 1;
+    state.filter = "all";
+    revalidate();
+  }
+
+  async function loadFile(file) {
+    state.busy = true;
+    state.error = "";
+    render();
+    try {
+      const parsed = await parseImportFile(file);
+      // Check the default worksheet before replacing the current staging state.
+      parsed.readSheet(parsed.sheetNames[0]);
+      state.parsed = parsed;
+      state.percentMode = "percent";
+      selectSheet(parsed.sheetNames[0]);
+    } catch (failure) {
+      state.error = `${file.name}: ${failure.message || "The file could not be read."}`;
+    } finally {
+      state.busy = false;
+      render();
+    }
+  }
+
+  function filePicker() {
+    const zone = element("div", "", "sf-import-dropzone");
+    const label = element("label", "Choose a CSV or XLSX file");
+    label.htmlFor = "sf-import-file";
+    const input = element("input");
+    input.id = label.htmlFor;
+    input.type = "file";
+    input.accept = ".csv,.xlsx";
+    input.disabled = state.busy;
+    input.addEventListener("change", () => {
+      const file = input.files[0];
+      if (file) confirmDiscard(() => loadFile(file));
+      input.value = "";
+    });
+    zone.append(label, input, element("small", "Drop one file here. Maximum 5 MB, 5,000 rows and 100 columns."));
+    zone.addEventListener("dragover", (event) => { event.preventDefault(); });
+    zone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      if (state.busy) return;
+      if (event.dataTransfer.files.length !== 1) {
+        state.error = "Choose one file at a time.";
+        render();
+        return;
+      }
+      confirmDiscard(() => loadFile(event.dataTransfer.files[0]));
+    });
+    return zone;
+  }
+
+  function summary() {
+    const result = state.results;
+    const group = element("div", "", "sf-import-summary");
+    [["Rows", result.rows.length], ["Valid", result.summary.valid], ["Warning", result.summary.warning], ["Error", result.summary.error]].forEach(([label, value]) => {
+      const item = element("div");
+      item.append(element("strong", String(value)), element("span", label));
+      group.append(item);
+    });
+    return group;
+  }
+
+  function mappingIssues() {
+    if (!state.results.mappingIssues.length) return element("p", "All required fields are mapped.", "sf-import-ready");
+    const list = element("ul", "", "sf-import-error");
+    state.results.mappingIssues.forEach((issue) => list.append(element("li", issue)));
+    return list;
+  }
+
+  function renderMappings() {
+    content.append(element("h3", "Map Columns"));
+    if (state.parsed.sheetNames.length > 1) {
+      const field = element("label", "Worksheet", "sf-import-field");
+      const select = element("select");
+      state.parsed.sheetNames.forEach((name) => {
+        const option = element("option", name);
+        option.value = name;
+        select.append(option);
+      });
+      select.value = state.sheet;
+      select.disabled = state.busy;
+      select.addEventListener("change", () => {
+        const name = select.value;
+        confirmDiscard(() => {
+          try { selectSheet(name); state.error = ""; }
+          catch (failure) { state.error = failure.message; }
+          render();
+        });
+      });
+      field.append(select);
+      content.append(field);
+    }
+    const percentField = element("label", "Unformatted completion numbers", "sf-import-field");
+    const percent = element("select");
+    percent.id = "sf-import-percent-mode";
+    [["percent", "Percentages: 55 means 55%"], ["fraction", "Fractions: 0.55 means 55%"]].forEach(([value, label]) => {
+      const option = element("option", label);
+      option.value = value;
+      percent.append(option);
+    });
+    percent.value = state.percentMode;
+    percent.addEventListener("change", () => {
+      state.percentMode = percent.value;
+      state.reached = 1;
+      revalidate();
+      render(percent.id);
+    });
+    percentField.append(percent);
+    content.append(percentField);
+    const grid = element("div", "", "sf-import-mappings");
+    state.source.headers.forEach((header, index) => {
+      const row = element("div", "", "sf-import-mapping");
+      const source = element("div");
+      source.append(element("strong", header || `Column ${index + 1}`), element("small", String(state.source.rows[0].values[index] ?? "").slice(0, 120)));
+      const field = element("label", `Destination for ${header || `Column ${index + 1}`}`, "sf-import-field");
+      const select = element("select");
+      select.id = `sf-import-mapping-${index}`;
+      const ignore = element("option", "Ignore column");
+      ignore.value = "";
+      select.append(ignore);
+      IMPORT_FIELDS.forEach((definition) => {
+        const option = element("option", `${definition.label} (${definition.required ? "Required" : "Optional"})`);
+        option.value = definition.key;
+        option.disabled = state.mappings.includes(definition.key) && state.mappings[index] !== definition.key;
+        select.append(option);
+      });
+      select.value = state.mappings[index];
+      select.addEventListener("change", () => {
+        state.mappings[index] = select.value;
+        state.reached = 1;
+        revalidate();
+        render(select.id);
+      });
+      field.append(select);
+      if (state.suggestions[index] && state.suggestions[index] === state.mappings[index]) field.append(element("small", "Suggested mapping"));
+      row.append(source, field);
+      grid.append(row);
+    });
+    content.append(grid, mappingIssues(), summary(), button("Reset Mappings", () => confirmDiscard(() => {
+      state.mappings = [...state.suggestions];
+      state.reached = 1;
+      revalidate();
+      render();
+    })));
+  }
+
+  function previewRows() {
+    return state.results.rows.filter((row) => state.filter === "all"
+      || (state.filter === "valid" ? row.status === "valid" : row.status !== "valid"));
+  }
+
+  function renderTable(preview) {
+    const field = element("label", "Rows", "sf-import-field");
+    const filter = element("select");
+    filter.id = "sf-import-row-filter";
+    [["all", "All rows"], ["valid", "Valid rows"], ["issues", "Rows with issues"]].forEach(([value, label]) => {
+      const option = element("option", label); option.value = value; filter.append(option);
+    });
+    filter.value = state.filter;
+    filter.addEventListener("change", () => { state.filter = filter.value; state.page = 1; render(filter.id); });
+    field.append(filter);
+    const rows = previewRows();
+    const pages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+    state.page = Math.min(state.page, pages);
+    const slice = rows.slice((state.page - 1) * PAGE_SIZE, state.page * PAGE_SIZE);
+    const wrap = element("div", "", "sf-import-table-wrap");
+    const table = element("table", "", "sf-import-table");
+    table.append(element("caption", preview ? "Normalized project preview" : "Row validation results"));
+    const head = element("thead");
+    const headings = element("tr");
+    const columns = preview ? ["Source Row", "Status", "projectName", "projectManager", "projectType", `budgetBAC (${APP_CONFIG.portfolio.currencyCode})`, "percentComplete (0-1)", "riskScore", "endDate", "Issues"] : ["Source Row", "Status", "Project Name", "Issues"];
+    columns.forEach((label) => { const th = element("th", label); th.scope = "col"; headings.append(th); });
+    head.append(headings);
+    const body = element("tbody");
+    slice.forEach((row) => {
+      const tr = element("tr");
+      const label = `${row.status[0].toUpperCase()}${row.status.slice(1)}`;
+      const values = preview ? [row.rowNumber, label, row.project.projectName, row.project.projectManager, row.project.projectType,
+        row.project.budgetBAC, row.project.percentComplete, row.project.riskScore, row.project.endDate]
+        : [row.rowNumber, label, row.project.projectName];
+      values.forEach((value, index) => {
+        const td = element("td", String(value ?? "--"));
+        if (index === 1) td.dataset.status = row.status;
+        tr.append(td);
+      });
+      const messages = element("td");
+      const issues = [...row.errors, ...row.warnings];
+      if (!issues.length) messages.textContent = state.results.mappingIssues.length ? "Resolve the missing column mappings above." : "No issues";
+      else { const list = element("ul"); issues.forEach((issue) => list.append(element("li", issue))); messages.append(list); }
+      tr.append(messages);
+      body.append(tr);
+    });
+    if (!slice.length) { const row = element("tr"); const td = element("td", "No rows in this view."); td.colSpan = columns.length; row.append(td); body.append(row); }
+    table.append(head, body);
+    wrap.append(table);
+    const pagination = element("div", "", "sf-import-pagination");
+    const previous = button("Previous", () => { state.page -= 1; render("sf-import-previous"); });
+    previous.id = "sf-import-previous";
+    previous.disabled = state.page <= 1;
+    previous.setAttribute("aria-label", "Previous preview page");
+    const next = button("Next", () => { state.page += 1; render("sf-import-next"); });
+    next.id = "sf-import-next";
+    next.disabled = state.page >= pages;
+    next.setAttribute("aria-label", "Next preview page");
+    pagination.append(previous, element("span", `Page ${state.page} of ${pages}. Previewing ${slice.length} of ${rows.length} rows (${state.source.rows.length} total).`), next);
+    content.append(field, wrap, pagination);
+  }
+
+  function render(focusId = null) {
+    steps.replaceChildren();
+    STEPS.forEach((name, index) => {
+      const item = element("li");
+      const needsAttention = state.results && ((index === 1 && state.results.mappingIssues.length) || (index === 2 && state.results.summary.error));
+      const control = button(`${index + 1}. ${name}${needsAttention && index <= state.reached ? " - Needs attention" : index < state.step ? " - Complete" : ""}`, () => { state.step = index; state.error = ""; state.discard = null; render(); });
+      control.disabled = state.busy || index > state.reached;
+      if (index === state.step) control.setAttribute("aria-current", "step");
+      item.append(control); steps.append(item);
+    });
+    error.textContent = state.error;
+    error.hidden = !state.error;
+    status.textContent = state.busy ? "Reading file locally..." : state.parsed ? `${state.parsed.name} | ${state.parsed.type} | ${state.sheet} | ${state.source.rows.length} rows` : "No file selected";
+    dialog.setAttribute("aria-busy", String(state.busy));
+    content.replaceChildren();
+    footer.replaceChildren();
+    if (state.step === 0) content.append(filePicker());
+    else if (state.step === 1) renderMappings();
+    else {
+      content.append(element("h3", STEPS[state.step]), summary(), mappingIssues());
+      if (state.step === 3) content.append(element("p", state.results.summary.error ? "Preparation needs attention. No records have been imported."
+        : state.results.summary.warning ? "Preparation complete with warnings to review. No records have been imported."
+          : "Import preparation complete. No records have been imported.", "sf-import-context"));
+      renderTable(state.step === 3);
+    }
+    if (state.discard) {
+      footer.append(element("p", "Discard the current staging or mapping changes?", "sf-import-discard"));
+      footer.append(button("Keep Staging", () => { state.discard = null; render(); }), button("Discard Changes", () => {
+        const action = state.discard;
+        state.discard = null;
+        action();
+      }));
+    } else {
+      footer.append(button("Cancel", () => confirmDiscard(close)));
+      if (state.source) footer.append(button("Replace File", () => { state.step = 0; state.error = ""; render(); }));
+      if (state.step > 0) footer.append(button("Back", () => { state.step -= 1; state.error = ""; render(); }));
+      if (state.source && state.step < 3) footer.append(button(`Continue to ${STEPS[state.step + 1]}`, () => {
+        state.step += 1; state.reached = Math.max(state.reached, state.step); state.error = ""; render();
+      }, "sf-import-primary"));
+      if (state.step === 3) footer.append(button("Return to Projects", () => confirmDiscard(close), "sf-import-primary"));
+    }
+    footer.querySelectorAll("button").forEach((control) => { control.disabled = state.busy; });
+    if (focusId) document.getElementById(focusId)?.focus();
+    else content.querySelector("input, select")?.focus();
+  }
+
+  dialog.addEventListener("cancel", (event) => { event.preventDefault(); confirmDiscard(close); });
+  document.body.append(dialog);
+  render();
+  dialog.showModal();
+  content.querySelector("input")?.focus();
+}

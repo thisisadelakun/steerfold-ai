@@ -79,6 +79,7 @@ import { renderGovernanceView } from "./governance-view.js";
 import { initGovernanceWorkflow } from "./governance-workflow.js";
 
 import { openProjectForm } from "./project-form.js";
+import { openProjectImport } from "./project-import.js";
 
 import { openConfirmDialog } from "./confirm-dialog.js";
 
@@ -2668,7 +2669,7 @@ renderProjectsPageActions() {
 
   header
     ?.querySelectorAll(
-      ".sf-project-create-button",
+      ".sf-project-create-button, .sf-project-management-actions",
     )
     .forEach((button) => {
       button.remove();
@@ -2697,7 +2698,15 @@ renderProjectsPageActions() {
     },
   );
 
-  header.append(button);
+  const importButton = document.createElement("button");
+  importButton.type = "button";
+  importButton.className = "sf-project-import-button";
+  importButton.textContent = "Import Projects";
+  importButton.addEventListener("click", () => openProjectImport());
+  const actions = document.createElement("div");
+  actions.className = "sf-project-management-actions";
+  actions.append(button, importButton);
+  header.append(actions);
 },
 
 openNewProjectForm() {
