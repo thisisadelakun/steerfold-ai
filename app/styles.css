@@ -28,9 +28,23 @@
   --sf-danger-rgb: 217, 101, 101;
   --sf-shadow-color: rgba(0, 0, 0, 0.62);
   --sf-shadow-soft-color: rgba(0, 0, 0, 0.42);
+  --sf-surface-muted: var(--sf-surface-elevated);
+  --sf-control-bg: var(--sf-surface-elevated);
+  --sf-control-border: #686D74;
+  --sf-hover-bg: rgba(var(--sf-accent-rgb), 0.06);
+  --sf-selected-bg: rgba(var(--sf-accent-rgb), 0.12);
+  --sf-action-bg: #4969C7;
+  --sf-overlay-bg: rgba(0, 0, 0, 0.72);
+  --sf-shadow-panel: 0 1px 3px rgba(0, 0, 0, 0.14);
+  --sf-shadow-utility: 0 1px 2px rgba(0, 0, 0, 0.1);
+  --sf-shadow-dialog: 0 18px 54px var(--sf-shadow-color);
+  --sf-focus-ring: 0 0 0 3px rgba(var(--sf-accent-rgb), 0.18);
+  --sf-control-height: 44px;
+  --sf-panel-padding: 24px;
+  --sf-section-gap: 26px;
 
-  --sf-radius-sm: 6px;
-  --sf-radius-md: 10px;
+  --sf-radius-sm: 8px;
+  --sf-radius-md: 12px;
 
   --sf-space-1: 4px;
   --sf-space-2: 8px;
@@ -43,31 +57,39 @@
 
 :root[data-sf-theme="light"] {
   color-scheme: light;
-  --sf-bg: #F5F2EA;
-  --sf-surface: #FAF8F2;
+  --sf-bg: #F7F4ED;
+  --sf-surface: #FFFFFF;
   --sf-surface-elevated: #FFFFFF;
-  --sf-text-primary: #202124;
-  --sf-text-secondary: #656970;
-  --sf-border: #DDD9CF;
+  --sf-text-primary: #24262A;
+  --sf-text-secondary: #68645C;
+  --sf-border: #E3DDD2;
   --sf-accent: #3D5DB9;
   --sf-success: #21764D;
   --sf-warning: #8A5B00;
   --sf-danger: #B13C3C;
-  --sf-sidebar-bg: #EEEAE1;
+  --sf-sidebar-bg: #FBFAF6;
   --sf-icon-governance: #4F64A9;
   --sf-icon-stakeholder: #326D85;
   --sf-icon-settings: #665A9F;
   --sf-icon-account: #705A9A;
-  --sf-bg-rgb: 245, 242, 234;
+  --sf-bg-rgb: 247, 244, 237;
   --sf-surface-elevated-rgb: 255, 255, 255;
-  --sf-text-primary-rgb: 32, 33, 36;
-  --sf-text-secondary-rgb: 101, 105, 112;
+  --sf-text-primary-rgb: 36, 38, 42;
+  --sf-text-secondary-rgb: 104, 100, 92;
   --sf-accent-rgb: 61, 93, 185;
   --sf-success-rgb: 33, 118, 77;
   --sf-warning-rgb: 138, 91, 0;
   --sf-danger-rgb: 177, 60, 60;
   --sf-shadow-color: rgba(32, 33, 36, 0.14);
   --sf-shadow-soft-color: rgba(32, 33, 36, 0.12);
+  --sf-surface-muted: #FAF8F3;
+  --sf-control-bg: var(--sf-surface-muted);
+  --sf-control-border: #918A7F;
+  --sf-action-bg: var(--sf-accent);
+  --sf-overlay-bg: rgba(57, 52, 44, 0.38);
+  --sf-shadow-panel: 0 1px 2px rgba(57, 48, 31, 0.035), 0 6px 20px rgba(57, 48, 31, 0.035);
+  --sf-shadow-utility: 0 1px 3px rgba(57, 48, 31, 0.04);
+  --sf-shadow-dialog: 0 22px 64px rgba(57, 48, 31, 0.18), 0 3px 12px rgba(57, 48, 31, 0.06);
 }
 
 :root[data-sf-theme="light"] :is(
@@ -223,7 +245,7 @@ select {
   min-width: 0;
   min-height: 0;
   overflow: hidden;
-  gap: 24px;
+  gap: 28px;
   padding: 28px 18px;
   background: var(--sf-sidebar-bg);
   border-right: 1px solid var(--sf-border);
@@ -282,7 +304,7 @@ select {
 .sf-nav {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
   flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
@@ -308,6 +330,7 @@ select {
   color: var(--sf-text-secondary);
   font-size: 0.9rem;
   font-weight: 650;
+  background: var(--sf-surface-muted);
 }
 
 .sf-sidebar-account-label {
@@ -344,6 +367,7 @@ select {
   min-height: 42px;
   padding: 10px 12px;
   border-left: 2px solid transparent;
+  border-radius: var(--sf-radius-sm);
   color: var(--sf-text-secondary);
   font-size: 0.94rem;
 }
@@ -426,7 +450,7 @@ select {
 
 .sf-nav-link:hover,
 .sf-nav-link:focus-visible {
-  background: var(--sf-surface);
+  background: var(--sf-hover-bg);
   color: var(--sf-text-primary);
 }
 
@@ -437,8 +461,9 @@ select {
 
 .sf-nav-link--active {
   border-left-color: var(--sf-accent);
-  background: var(--sf-surface);
+  background: var(--sf-selected-bg);
   color: var(--sf-text-primary);
+  font-weight: 650;
 }
 
 
@@ -553,7 +578,7 @@ select {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 24px;
-  padding: 30px 34px 26px;
+  padding: 34px 34px 28px;
   border-bottom: 1px solid var(--sf-border);
   background: var(--sf-bg);
 }
@@ -580,14 +605,16 @@ select {
 }
 
 .sf-page-heading h1 {
-  font-size: clamp(1.9rem, 3vw, 2.6rem);
-  line-height: 1.1;
+  font-size: 2.25rem;
+  line-height: 1.15;
+  font-weight: 700;
 }
 
 .sf-page-heading p,
 .sf-section-header p {
   margin: 8px 0 0;
   color: var(--sf-text-secondary);
+  line-height: 1.5;
 }
 
 .sf-organization-context {
@@ -945,10 +972,10 @@ select {
 .sf-main-content {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 22px;
+  gap: var(--sf-section-gap);
   min-width: 0;
   max-width: 100%;
-  padding: 28px 34px 36px;
+  padding: 30px 34px 40px;
 }
 
 .sf-app-loader {
@@ -3112,6 +3139,7 @@ select {
   border: 1px solid var(--sf-border);
   border-radius: var(--sf-radius-md);
   background: var(--sf-surface);
+  box-shadow: var(--sf-shadow-panel);
 }
 
 .sf-kpi-card {
@@ -3126,7 +3154,9 @@ select {
 
 .sf-kpi-label {
   color: var(--sf-text-secondary);
-  font-size: 0.9rem;
+  font-size: 0.84rem;
+  font-weight: 550;
+  line-height: 1.4;
 }
 
 .sf-kpi-value {
@@ -3176,7 +3206,7 @@ select {
 .sf-panel {
   min-width: 0;
   max-width: 100%;
-  padding: 22px;
+  padding: var(--sf-panel-padding);
 }
 
 .sf-section-header {
@@ -3188,8 +3218,9 @@ select {
 }
 
 .sf-section-header h2 {
-  font-size: 1.14rem;
-  line-height: 1.25;
+  font-size: 1.18rem;
+  line-height: 1.35;
+  font-weight: 650;
 }
 
 
@@ -3235,6 +3266,7 @@ select {
   color: var(--sf-accent);
   font-weight: 700;
   box-shadow: inset 0 -2px var(--sf-accent);
+  background: var(--sf-selected-bg);
 }
 
 .sf-explorer-filter-panel {
@@ -3244,7 +3276,7 @@ select {
 }
 
 .sf-explorer-filter-panel summary {
-  padding: 12px 0;
+  padding: 16px 0;
   color: var(--sf-text-primary);
   font-weight: 650;
   cursor: pointer;
@@ -3253,8 +3285,8 @@ select {
 .sf-explorer-controls {
   display: grid;
   grid-template-columns: minmax(0, 1.6fr) repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  padding: 4px 0 16px;
+  gap: 16px 12px;
+  padding: 4px 0 20px;
 }
 
 .sf-explorer-controls .sf-project-filter-field {
@@ -3456,7 +3488,9 @@ select {
   justify-content: space-between;
   flex-wrap: wrap;
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 20px;
+  padding-top: 16px;
+  border-top: 1px solid var(--sf-border);
   color: var(--sf-text-secondary);
   font-size: 0.86rem;
 }
@@ -3562,6 +3596,7 @@ select {
 }
 
 .sf-project-table th {
+  background: var(--sf-surface-muted);
   color: var(--sf-text-secondary);
   font-size: 0.76rem;
   font-weight: 700;
@@ -3610,7 +3645,7 @@ select {
 .sf-project-table
   tbody
   tr:not(.sf-table-message-row):hover {
-  background: rgba(var(--sf-text-primary-rgb), 0.03);
+  background: var(--sf-hover-bg);
 }
 
 
@@ -4073,25 +4108,28 @@ select {
   min-height: 26px;
   padding: 3px 9px;
   border: 1px solid var(--sf-border);
-  border-radius: var(--sf-radius-sm);
-  background: transparent;
+  border-radius: 999px;
+  background: var(--sf-surface-muted);
   color: var(--sf-text-secondary);
   font-size: 0.84rem;
   font-weight: 650;
 }
 
 .sf-status-badge--on-track {
-  border-color: rgba(var(--sf-success-rgb), 0.45);
+  border-color: rgba(var(--sf-success-rgb), 0.24);
+  background: rgba(var(--sf-success-rgb), 0.08);
   color: var(--sf-success);
 }
 
 .sf-status-badge--at-risk {
-  border-color: rgba(var(--sf-warning-rgb), 0.48);
+  border-color: rgba(var(--sf-warning-rgb), 0.24);
+  background: rgba(var(--sf-warning-rgb), 0.08);
   color: var(--sf-warning);
 }
 
 .sf-status-badge--critical {
-  border-color: rgba(var(--sf-danger-rgb), 0.5);
+  border-color: rgba(var(--sf-danger-rgb), 0.24);
+  background: rgba(var(--sf-danger-rgb), 0.08);
   color: var(--sf-danger);
 }
 
@@ -7033,9 +7071,9 @@ select {
 
 .sf-governance-workflow-primary button:first-child,
 .sf-governance-dialog-confirm {
-  border-color: var(--sf-accent) !important;
-  background: var(--sf-accent) !important;
-  color: var(--sf-bg) !important;
+  border-color: var(--sf-action-bg) !important;
+  background: var(--sf-action-bg) !important;
+  color: var(--sf-on-accent) !important;
   font-weight: 700;
 }
 
@@ -7168,7 +7206,8 @@ select {
   min-height: 25px;
   padding: 3px 7px;
   border: 1px solid var(--sf-border);
-  border-radius: var(--sf-radius-sm);
+  border-radius: 999px;
+  background: var(--sf-surface-muted);
   color: var(--sf-text-secondary);
   font-size: 0.72rem;
   font-weight: 700;
@@ -7176,20 +7215,23 @@ select {
 }
 
 .sf-governance-status--approved {
-  border-color: var(--sf-success);
+  border-color: rgba(var(--sf-success-rgb), 0.24);
+  background: rgba(var(--sf-success-rgb), 0.08);
   color: var(--sf-success);
 }
 
 .sf-governance-status--rejected,
 .sf-governance-status--withdrawn {
-  border-color: var(--sf-danger);
+  border-color: rgba(var(--sf-danger-rgb), 0.24);
+  background: rgba(var(--sf-danger-rgb), 0.08);
   color: var(--sf-danger);
 }
 
 .sf-governance-status--submitted,
 .sf-governance-status--under-review,
 .sf-governance-status--deferred {
-  border-color: var(--sf-warning);
+  border-color: rgba(var(--sf-warning-rgb), 0.24);
+  background: rgba(var(--sf-warning-rgb), 0.08);
   color: var(--sf-warning);
 }
 
@@ -7718,6 +7760,166 @@ select {
   .sf-governance-apply-button { width: 100%; }
 }
 
+/* Shared presentation rules do not change control state or route layouts. */
+@media screen {
+  :is(.sf-import-dialog button, .sf-governance-workflow-primary button,
+    .sf-governance-lifecycle-actions button, .sf-governance-dialog-actions button,
+    .sf-project-delete-button, .sf-confirm-delete) {
+    min-height: var(--sf-control-height);
+  }
+
+  :is(.sf-nav-link, .sf-icon-button, .sf-export-button, .sf-tour-button,
+    .sf-project-create-button, .sf-project-edit-button, .sf-project-import-button,
+    .sf-project-form-cancel, .sf-project-form-submit, .sf-pagination-button,
+    .sf-explorer-quick-views button, .sf-explorer-filter-summary button,
+    .sf-import-dialog button, .sf-theme-choices label) {
+    transition: background-color 140ms ease, border-color 140ms ease, color 140ms ease;
+  }
+
+  :is(.sf-search-input, .sf-filter-select, .sf-project-filter,
+    .sf-project-form-field input, .sf-project-form-field select,
+    .sf-scenario-input, .sf-scenario-select, .sf-sensitivity-variation,
+    .sf-analysis-control select, .sf-stakeholder-project-select,
+    .sf-governance-control, .sf-governance-workflow-controls input,
+    .sf-governance-workflow-controls select, .sf-governance-register-controls input,
+    .sf-governance-register-controls select, .sf-governance-dialog-field textarea,
+    .sf-governance-access input, .sf-governance-access select,
+    .sf-currency-preferences select, .sf-import-field select,
+    .sf-pagination-size select, .sf-auth-field input) {
+    min-height: var(--sf-control-height);
+    padding-block: 9px;
+    border-color: var(--sf-control-border);
+    border-radius: var(--sf-radius-sm);
+    background: var(--sf-control-bg);
+    color: var(--sf-text-primary);
+    line-height: 1.4;
+  }
+
+  :where(.sf-app-shell, .sf-project-form-modal, .sf-governance-dialog,
+    .sf-auth-panel, .sf-import-dialog) :is(input, select, textarea):focus-visible {
+    border-color: var(--sf-accent);
+    outline: 2px solid var(--sf-accent);
+    outline-offset: 2px;
+    box-shadow: var(--sf-focus-ring);
+  }
+
+  :is(.sf-project-create-button, .sf-project-edit-button, .sf-project-form-submit,
+    .sf-auth-submit, .sf-tour-button-primary, .sf-governance-workflow-primary button:first-child,
+    .sf-governance-dialog-confirm, .sf-governance-apply-button, .sf-import-dialog .sf-import-primary) {
+    min-height: var(--sf-control-height);
+    border-color: var(--sf-action-bg);
+    background: var(--sf-action-bg);
+    color: var(--sf-on-accent);
+    box-shadow: var(--sf-shadow-utility);
+  }
+
+  :is(.sf-project-create-button, .sf-project-edit-button, .sf-project-form-submit,
+    .sf-auth-submit, .sf-tour-button-primary, .sf-governance-workflow-primary button:first-child,
+    .sf-governance-dialog-confirm, .sf-governance-apply-button, .sf-import-dialog .sf-import-primary):hover:not(:disabled) {
+    background: color-mix(in srgb, var(--sf-action-bg) 92%, var(--sf-sidebar-bg));
+  }
+
+  :is(.sf-project-import-button, .sf-project-form-cancel, .sf-confirm-cancel,
+    .sf-scenario-reset, .sf-governance-reset, .sf-pagination-button,
+    .sf-explorer-quick-views button, .sf-explorer-filter-summary button,
+    .sf-explorer-clear) {
+    min-height: var(--sf-control-height);
+    background: var(--sf-surface-muted);
+    color: var(--sf-text-primary);
+  }
+
+  :is(.sf-project-import-button, .sf-project-form-cancel, .sf-confirm-cancel,
+    .sf-scenario-reset, .sf-governance-reset, .sf-pagination-button,
+    .sf-explorer-quick-views button, .sf-explorer-filter-summary button,
+    .sf-explorer-clear):hover:not(:disabled) {
+    border-color: var(--sf-accent);
+    background: var(--sf-hover-bg);
+  }
+
+  .sf-explorer-quick-views button[aria-pressed="true"] {
+    background: var(--sf-selected-bg);
+    color: var(--sf-accent);
+  }
+
+  :is(.sf-exec-kpi, .sf-stakeholder-card, .sf-governance-report-kpis > div) {
+    background: var(--sf-surface-muted);
+    box-shadow: var(--sf-shadow-utility);
+  }
+
+  .sf-kpi-value[data-kpi] { font-size: 1.75rem; }
+  .sf-governance-field,
+  .sf-governance-impact-field { align-content: start; }
+
+  :is(.sf-confirm-dialog, .sf-project-form-modal, .sf-auth-panel, .sf-governance-dialog, .sf-import-dialog) {
+    box-shadow: var(--sf-shadow-dialog);
+  }
+
+  :is(.sf-project-form-overlay, .sf-confirm-overlay, .sf-governance-dialog-overlay),
+  .sf-import-dialog::backdrop { background: var(--sf-overlay-bg); }
+
+  .sf-import-dialog { background: var(--sf-surface-elevated); padding: 28px; }
+  .sf-import-content { gap: 20px; }
+  .sf-import-steps { gap: 12px; margin-block: 24px; }
+  .sf-import-steps button { min-height: 48px; background: var(--sf-surface-muted); line-height: 1.4; }
+  .sf-import-steps [aria-current="step"] { background: var(--sf-selected-bg); }
+  .sf-import-dropzone { background: var(--sf-surface-muted); padding: 28px 24px; }
+  .sf-import-mapping { padding-block: 6px 16px; gap: 16px; }
+  .sf-import-summary > div { padding-block: 16px; }
+  :is(.sf-import-table, .sf-governance-register) th { background: var(--sf-surface-muted); }
+  :is(.sf-import-table, .sf-governance-register) tbody tr:hover { background: var(--sf-hover-bg); }
+  :is(.sf-project-table, .sf-import-table, .sf-governance-register) td { line-height: 1.5; }
+  .sf-import-table [data-status] { font-weight: 650; white-space: nowrap; }
+  .sf-import-table [data-status="valid"] { background: rgba(var(--sf-success-rgb), 0.08); }
+  .sf-import-table [data-status="warning"] { background: rgba(var(--sf-warning-rgb), 0.08); }
+  .sf-import-table [data-status="error"] { background: rgba(var(--sf-danger-rgb), 0.08); }
+
+  .sf-theme-preferences,
+  .sf-currency-preferences {
+    width: 100%;
+    max-width: 660px;
+    margin-top: 26px;
+    padding: 22px;
+    border: 1px solid var(--sf-border);
+    border-radius: var(--sf-radius-md);
+    background: var(--sf-surface);
+    box-shadow: var(--sf-shadow-panel);
+  }
+  :is(.sf-theme-preferences, .sf-currency-preferences) legend {
+    padding-inline: 8px;
+    font-size: 1.05rem;
+    font-weight: 650;
+  }
+  .sf-theme-choices { margin-top: 4px; }
+  .sf-theme-choices label { background: var(--sf-surface-muted); }
+  .sf-theme-choices label:has(input:checked) {
+    background: var(--sf-selected-bg);
+    color: var(--sf-accent);
+    font-weight: 650;
+    box-shadow: inset 0 -2px var(--sf-accent);
+  }
+  .sf-fx-status {
+    padding: 14px 16px;
+    border-left: 2px solid var(--sf-accent);
+    background: var(--sf-hover-bg);
+  }
+  .sf-currency-preview { padding-top: 18px; }
+  .sf-currency-preferences .sf-fx-caution { line-height: 1.6; }
+  .sf-governance-dialog-warning { background: rgba(var(--sf-warning-rgb), 0.08); }
+
+  @media (max-width: 720px) {
+    :root { --sf-panel-padding: 18px; --sf-section-gap: 22px; }
+    .sf-page-heading h1 { font-size: 1.85rem; }
+    .sf-import-dialog { padding: 18px; }
+    .sf-import-dropzone { padding: 22px 16px; }
+    .sf-theme-preferences,
+    .sf-currency-preferences { padding: 18px 16px; }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition: none !important; }
+  }
+}
+
 @media print {
   *,
   *::before,
@@ -7805,6 +8007,7 @@ select {
   .sf-panel,
   .sf-kpi-card,
   .sf-project-detail {
+    box-shadow: none;
     break-inside: avoid;
     page-break-inside: avoid;
   }
