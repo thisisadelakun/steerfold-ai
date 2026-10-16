@@ -318,6 +318,7 @@ function positionTourCard({
 function openTour({
   launchedBy = null,
   markCompletedOnClose = false,
+  steps = TOUR_STEPS,
 } = {}) {
   if (document.getElementById(TOUR_OVERLAY_ID)) {
     return;
@@ -414,7 +415,7 @@ function openTour({
       handleDocumentKeydown,
     );
 
-    if (completed || markCompletedOnClose) {
+    if (steps === TOUR_STEPS && (completed || markCompletedOnClose)) {
       markCompleted();
     }
 
@@ -424,19 +425,26 @@ function openTour({
   };
 
   const renderStep = () => {
-    const step = TOUR_STEPS[currentStepIndex];
+    const step = steps[currentStepIndex];
     const isFirstStep = currentStepIndex === 0;
     const isFinalStep =
-      currentStepIndex === TOUR_STEPS.length - 1;
+      currentStepIndex === steps.length - 1;
 
     progress.textContent =
-      `${currentStepIndex + 1} of ${TOUR_STEPS.length}`;
+      `${currentStepIndex + 1} of ${steps.length}`;
     title.textContent = step.title;
     copy.textContent = step.copy;
     backButton.disabled = isFirstStep;
     skipButton.hidden = isFinalStep;
     nextButton.textContent =
-      isFinalStep ? "Start Exploring" : "Next";
+      isFinalStep ? (steps === TOUR_STEPS ? "Start Exploring" : "Done") : "Next";
+
+    if (steps !== TOUR_STEPS && step.selector) {
+      const target = document.querySelector(step.selector);
+      if (target?.getClientRects().length && !target.closest("[hidden]")) {
+        target.scrollIntoView({ block: "center", behavior: "instant" });
+      }
+    }
 
     requestAnimationFrame(() => {
       positionTourCard({
@@ -452,7 +460,7 @@ function openTour({
     positionTourCard({
       card,
       spotlight,
-      step: TOUR_STEPS[currentStepIndex],
+      step: steps[currentStepIndex],
     });
   }
 
@@ -485,7 +493,7 @@ function openTour({
   });
 
   nextButton.addEventListener("click", () => {
-    if (currentStepIndex === TOUR_STEPS.length - 1) {
+    if (currentStepIndex === steps.length - 1) {
       closeTour({
         completed: true,
       });
@@ -507,11 +515,21 @@ function openTour({
   renderStep();
 }
 
-export function initOnboardingTour() {
+export function openPageTour(steps, launchedBy) {
+  if (steps.length >= 3 && steps.length <= 6) openTour({ steps, launchedBy });
+}
+
+export function initOnboardingTour({ onHelp } = {}) {
   const tourButton = createTourButton();
 
+  if (onHelp && tourButton) {
+    tourButton.setAttribute("aria-label", "How to use this page");
+    tourButton.title = "How to use this page";
+  }
+
   tourButton?.addEventListener("click", () => {
-    openTour({
+    if (onHelp) onHelp();
+    else openTour({
       launchedBy: tourButton,
     });
   });

@@ -69,6 +69,9 @@ import {
 import { initAuthUI } from "./auth-ui.js";
 
 import { initOnboardingTour } from "./onboarding-tour.js";
+import { openPageHelp } from "./page-help.js";
+import { openCalculator } from "./calculator.js";
+import { initVisualizationMotion } from "./visualization-motion.js";
 
 import { renderStakeholderView } from "./stakeholder-view.js";
 
@@ -276,9 +279,11 @@ const SteerfoldApp = {
     this.setupRouting();
     this.setupAuthChanges();
     initAuthUI();
-    initOnboardingTour();
+    initOnboardingTour({ onHelp: () => openPageHelp(this.activeHeaderView, this.helpButton) });
     this.helpButton = this.accountArea?.querySelector(".sf-tour-button");
+    this.setupCalculatorControl();
     this.updateHeaderActionsForView(getCurrentRoute().view);
+    initVisualizationMotion(document.querySelector(".sf-main-content"));
     this.loadDashboard();
   },
 
@@ -3157,10 +3162,30 @@ renderProjectDetail(project) {
     });
   },
 
+  setupCalculatorControl() {
+    if (!this.accountArea || this.calculatorButton) return;
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "sf-calculator-button";
+    button.title = "Open calculator";
+    button.setAttribute("aria-label", "Open calculator");
+    button.innerHTML = '<svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="5" y="3" width="14" height="18" rx="2"/><path d="M8 7h8M8 11h2m4 0h2m-8 4h2m4 0h2m-8 3h2m4 0h2"/></svg><span>Calculator</span>';
+    button.addEventListener("click", () => {
+      const project = this.activeHeaderView === "project"
+        ? this.getProjectById(this.state.currentProjectId)
+        : null;
+      openCalculator(project);
+    });
+    this.accountArea.insertBefore(button, this.helpButton ?? null);
+    this.calculatorButton = button;
+  },
+
   updateHeaderActionsForView(view) {
+    this.activeHeaderView = view;
     const sharedViews = ["portfolio", "budget", "forecasting", "decision-support", "governance", "stakeholder-view"];
     if (this.exportControl) this.exportControl.hidden = !sharedViews.includes(view) && view !== "project";
-    if (this.helpButton) this.helpButton.hidden = !sharedViews.includes(view);
+    if (this.helpButton) this.helpButton.hidden = false;
+    if (this.calculatorButton) this.calculatorButton.hidden = !["budget", "forecasting", "decision-support", "project"].includes(view);
   },
 
   setNavigationArea(areaName) {
