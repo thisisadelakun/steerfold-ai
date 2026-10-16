@@ -9,6 +9,9 @@ const PROJECTS_CSV_PATH = "data/Steerfold_AI_Project_Data.csv";
 
 const USE_SUPABASE = true;
 
+const PROJECT_READ_PAGE_SIZE = 1000;
+const PROJECT_READ_MAX_PAGES = 100;
+
 let lastPortfolioDataSource = null;
 
 function parseCsv(text) {
@@ -339,21 +342,47 @@ const supabaseProvider = {
     url.searchParams.set("select", "*");
     url.searchParams.set("order", "project_id.asc");
 
-    const response = await fetch(url.toString(), {
-      headers: {
-        apikey: SUPABASE_PUBLISHABLE_KEY,
-      },
-    });
+    const projects = [];
+    const projectIds = new Set();
 
-    if (!response.ok) {
-      throw new Error(
-        `Supabase loadProjects failed with status ${response.status}`,
-      );
+    for (let page = 0; page < PROJECT_READ_MAX_PAGES; page += 1) {
+      const start = page * PROJECT_READ_PAGE_SIZE;
+      const response = await fetch(url.toString(), {
+        headers: {
+          apikey: SUPABASE_PUBLISHABLE_KEY,
+          "Range-Unit": "items",
+          Range: `${start}-${start + PROJECT_READ_PAGE_SIZE - 1}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(
+          `Supabase loadProjects failed with status ${response.status}`,
+        );
+      }
+
+      const rows = await response.json();
+
+      if (!Array.isArray(rows) || rows.length > PROJECT_READ_PAGE_SIZE) {
+        throw new Error("Supabase loadProjects returned an invalid project page.");
+      }
+
+      for (const row of rows) {
+        const project = normalizeSupabaseProject(row);
+        // Reject overlapping pages rather than silently double-counting projects.
+        if (projectIds.has(project.projectId)) {
+          throw new Error("Supabase loadProjects returned duplicate project identifiers. Reload the portfolio.");
+        }
+        projectIds.add(project.projectId);
+        projects.push(project);
+      }
+
+      if (rows.length < PROJECT_READ_PAGE_SIZE) {
+        return projects;
+      }
     }
 
-    const rows = await response.json();
-
-    return rows.map(normalizeSupabaseProject);
+    throw new Error("Supabase loadProjects exceeded the safe pagination limit; the complete portfolio could not be loaded.");
   },
 
   async getProject(projectId) {
