@@ -3843,6 +3843,78 @@ select {
   line-height: 1.25;
 }
 
+.sf-portfolio-intelligence {
+  min-width: 0;
+  padding-block: 22px;
+  border-block: 1px solid var(--sf-border);
+}
+.sf-intelligence-narrative { margin: 0 0 22px; max-width: 105ch; color: var(--sf-text-secondary); font-size: 0.92rem; line-height: 1.65; }
+.sf-intelligence-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 18px; margin: 0 0 24px; }
+.sf-intelligence-metrics > div { min-width: 0; padding-inline-start: 12px; border-inline-start: 2px solid var(--sf-border); }
+.sf-intelligence-metrics dt { color: var(--sf-text-secondary); font-size: 0.83rem; font-weight: 600; }
+.sf-intelligence-metrics dd { display: grid; gap: 6px; margin: 6px 0 0; }
+.sf-intelligence-metrics strong { font-size: 1.5rem; font-variant-numeric: tabular-nums; }
+.sf-intelligence-metrics small { color: var(--sf-text-secondary); font-size: 0.75rem; line-height: 1.4; }
+.sf-intelligence-overview { display: grid; grid-template-columns: minmax(210px, 0.75fr) minmax(0, 2fr); gap: 24px; align-items: start; }
+.sf-intelligence-health { min-width: 0; }
+.sf-intelligence-health h3,
+.sf-intelligence-attention h3 { margin: 0 0 16px; font-size: 1rem; line-height: 1.4; }
+.sf-intelligence-health .sf-donut-layout { grid-template-columns: minmax(0, 1fr); justify-items: center; gap: 14px; }
+.sf-intelligence-health .sf-donut-svg { width: min(190px, 100%); }
+.sf-intelligence-health .sf-donut-legend { grid-template-columns: minmax(0, 1fr); width: 100%; max-width: 210px; }
+.sf-intelligence-health .sf-donut-legend-item { justify-content: flex-start; font-size: 0.83rem; }
+.sf-intelligence-health .sf-chart-caption { font-size: 0.73rem; }
+.sf-intelligence-signals { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; list-style: none; padding: 0; margin: 0; min-width: 0; }
+.sf-intelligence-signals > li { min-width: 0; padding: 14px; border: 1px solid var(--sf-border); border-radius: 6px; background: var(--sf-surface); }
+.sf-intelligence-signals h4 { margin: 0 0 7px; font-size: 0.84rem; font-weight: 650; }
+.sf-intelligence-signals p { margin: 7px 0 0; font-size: 0.8rem; color: var(--sf-text-secondary); line-height: 1.5; }
+.sf-portfolio-intelligence a { color: var(--sf-accent); text-decoration: underline; text-underline-offset: 3px; font-size: 0.85rem; }
+.sf-portfolio-intelligence :is(a, input, summary, button):focus-visible { outline: 2px solid var(--sf-accent); outline-offset: 3px; }
+.sf-intelligence-attention { margin-top: 28px; min-width: 0; }
+.sf-intelligence-filters { display: flex; flex-wrap: wrap; gap: 8px; margin: 0; padding: 0; border: 0; }
+.sf-intelligence-filters legend { margin-bottom: 8px; color: var(--sf-text-secondary); font-size: 0.8rem; }
+.sf-intelligence-filters label { display: inline-flex; align-items: center; gap: 7px; min-height: 40px; padding: 5px 10px; border: 1px solid var(--sf-border); border-radius: 6px; font-size: 0.8rem; cursor: pointer; }
+.sf-intelligence-filters input { accent-color: var(--sf-accent); margin: 0; }
+.sf-intelligence-filters label:has(input:checked) { border-color: var(--sf-accent); background: var(--sf-surface-elevated); font-weight: 650; }
+.sf-intelligence-result-count { color: var(--sf-text-secondary); font-size: 0.78rem; margin: 12px 0; }
+.sf-intelligence-attention-list { list-style: none; padding: 0; margin: 0; }
+.sf-intelligence-attention-list > li { display: grid; grid-template-columns: 26px minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 16px; padding-block: 16px; border-top: 1px solid var(--sf-border); }
+.sf-intelligence-attention-list > li > * { min-width: 0; }
+.sf-intelligence-rank { color: var(--sf-text-secondary); font-weight: 700; font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+.sf-intelligence-project { display: grid; justify-items: start; align-content: start; gap: 8px; }
+.sf-intelligence-project > a { font-weight: 650; }
+.sf-intelligence-project small,
+.sf-intelligence-action small { color: var(--sf-text-secondary); font-size: 0.75rem; line-height: 1.5; }
+.sf-intelligence-attention p { margin: 7px 0 0; font-size: 0.83rem; line-height: 1.55; }
+.sf-intelligence-urgency { display: inline-block; font-size: 0.75rem; font-weight: 650; }
+.sf-intelligence-urgency[data-urgency="Critical"] { color: var(--sf-danger); }
+.sf-intelligence-urgency[data-urgency="High"] { color: var(--sf-warning); }
+.sf-intelligence-empty { padding-block: 14px; color: var(--sf-text-secondary); }
+.sf-intelligence-expand { min-height: 40px; padding: 7px 12px; border: 1px solid var(--sf-border); border-radius: 6px; background: var(--sf-surface); color: var(--sf-text-primary); font: inherit; font-size: 0.8rem; cursor: pointer; }
+.sf-intelligence-expand:hover { border-color: var(--sf-accent); }
+.sf-intelligence-rules { margin-top: 16px; padding-top: 12px; border-top: 1px solid var(--sf-border); color: var(--sf-text-secondary); }
+.sf-intelligence-rules summary { min-height: 40px; font-size: 0.8rem; cursor: pointer; }
+.sf-intelligence-rules p { max-width: 110ch; }
+.sf-portfolio-intelligence :is(p, a, small, dt, dd) { overflow-wrap: anywhere; }
+@media (max-width: 1000px) {
+  .sf-intelligence-overview { grid-template-columns: minmax(0, 1fr); }
+  .sf-intelligence-health .sf-donut-layout { grid-template-columns: minmax(120px, 190px) minmax(0, 1fr); justify-content: start; }
+  .sf-intelligence-signals { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+@media (max-width: 720px) {
+  .sf-intelligence-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-intelligence-signals { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .sf-intelligence-attention-list > li { grid-template-columns: 24px minmax(0, 1fr); gap: 10px; }
+  .sf-intelligence-reason,
+  .sf-intelligence-action { grid-column: 2; }
+}
+@media print {
+  .sf-intelligence-filters,
+  .sf-intelligence-expand { display: none; }
+  .sf-intelligence-signals > li,
+  .sf-intelligence-attention-list > li { break-inside: avoid; }
+}
+
 .sf-donut-layout {
   display: grid;
   grid-template-columns: minmax(180px, 260px) minmax(0, 1fr);

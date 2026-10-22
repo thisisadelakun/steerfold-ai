@@ -19,7 +19,6 @@ import {
 import {
   getPortfolioStatusSummary,
   getPortfolioFinancialSummary,
-  getPortfolioRiskProfile,
   getResourceDemandByStatus,
   calculatePortfolioEvmSummary,
   calculatePortfolioForecast,
@@ -74,6 +73,7 @@ import { openCalculator } from "./calculator.js";
 import { initVisualizationMotion } from "./visualization-motion.js";
 
 import { renderStakeholderView } from "./stakeholder-view.js";
+import { renderPortfolioIntelligence } from "./portfolio-intelligence-view.js";
 
 import { renderScenarioAnalysis } from "./scenario-analysis.js";
 
@@ -418,8 +418,8 @@ const SteerfoldApp = {
       ".sf-kpi-card",
     );
 
-    this.portfolioInsightsContent = document.querySelector(
-    "[data-portfolio-insights-content]",
+    this.portfolioIntelligenceContent = document.querySelector(
+    "[data-portfolio-intelligence-content]",
   );
 
     this.projectsViews = document.querySelectorAll(
@@ -612,7 +612,7 @@ const SteerfoldApp = {
     if (!projects.length) return;
     this.renderFinancialPerformance(projects);
     if (this.portfolioAnalysisChart) this.portfolioAnalysisChart.replaceChildren(this.createSelectedPortfolioAnalysisChart(projects));
-    this.renderPortfolioInsights(projects);
+    this.renderPortfolioIntelligence(projects);
     this.renderBudgetKpis(projects);
     this.renderProjectVariance(projects);
     this.renderForecastingKpis(projects);
@@ -1392,7 +1392,7 @@ const SteerfoldApp = {
       this.renderKpis(projects);
       this.renderFinancialPerformance(projects);
       this.renderPortfolioAnalysis(projects);
-      this.renderPortfolioInsights(projects);
+      this.renderPortfolioIntelligence(projects);
       this.renderBudgetKpis(projects);
       this.renderEvmPerformance(projects);
       this.renderProjectVariance(projects);
@@ -1437,6 +1437,11 @@ const SteerfoldApp = {
       console.error("Portfolio data load failed:", error);
 
       this.renderKpis([]);
+      this.portfolioIntelligenceContent?.replaceChildren(
+        Object.assign(document.createElement("p"), {
+          textContent: "Portfolio intelligence is unavailable because the latest project data could not be loaded.",
+        }),
+      );
 
       this.renderTableMessage(
         "Portfolio data could not be loaded.",
@@ -2810,98 +2815,10 @@ openDeleteProjectConfirmation(project) {
   });
 },
 
-  renderPortfolioInsights(projects) {
-  const riskProfile =
-    getPortfolioRiskProfile(projects);
-
-  const statusSummary =
-    getPortfolioStatusSummary(projects);
-
-  const attentionCount =
-    statusSummary.atRisk + statusSummary.critical;
-
-  const highDemandPercent =
-    projects.length > 0
-      ? Math.round(
-          (riskProfile.resourceDemand.high /
-            projects.length) *
-            100,
-        )
-      : 0;
-
-  const highestRisk =
-    riskProfile.highestRiskProject;
-
-const insights = [
-  {
-    title: "Portfolio Exposure",
-    value: `${attentionCount} projects need attention`,
-    text:
-      `${statusSummary.atRisk} are currently At Risk and ` +
-      `${statusSummary.critical} is Critical. ` +
-      `These projects should be prioritized for management review.`,
-  },
-  {
-    title: "Priority Risk",
-    value: highestRisk
-      ? highestRisk.projectName
-      : "No elevated risk",
-    text: highestRisk
-      ? `This project has the portfolio's highest risk score at ` +
-        `${highestRisk.riskScore}/25 and is currently ` +
-        `${formatPercent(highestRisk.percentComplete)} complete.`
-      : "No project risk information is currently available.",
-  },
-  {
-    title: "Resource Capacity",
-    value:
-      `${riskProfile.resourceDemand.high} projects under high demand`,
-    text:
-      `${highDemandPercent}% of the portfolio currently requires high ` +
-      `resource capacity, while ${riskProfile.resourceDemand.medium} ` +
-      `projects have medium demand.`,
-  },
-];
-
-  const grid =
-    document.createElement("div");
-
-  grid.classList.add("sf-insights-grid");
-
-  insights.forEach((insight) => {
-    const card =
-      document.createElement("article");
-
-    const title =
-      document.createElement("span");
-
-    const value =
-      document.createElement("strong");
-
-    const text =
-      document.createElement("p");
-
-    card.classList.add("sf-insight-card");
-    title.classList.add("sf-insight-label");
-    value.classList.add("sf-insight-value");
-    text.classList.add("sf-insight-text");
-
-    title.textContent = insight.title;
-    value.textContent = insight.value;
-    text.textContent = insight.text;
-
-    card.append(
-      title,
-      value,
-      text,
-    );
-
-    grid.append(card);
+renderPortfolioIntelligence(projects) {
+  renderPortfolioIntelligence(this.portfolioIntelligenceContent, projects, {
+    onOpenProject: (projectId) => this.openProject(projectId),
   });
-
-  this.portfolioInsightsContent.replaceChildren(
-    grid,
-  );
 },
 
   renderProjects(projects) {
