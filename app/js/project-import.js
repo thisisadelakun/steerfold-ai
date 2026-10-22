@@ -1,8 +1,11 @@
 import { APP_CONFIG } from "./app-config.js";
 import { parseImportFile } from "./import-parser.js";
 import { IMPORT_FIELDS, suggestImportMappings, validateImportRows } from "./import-validation.js";
+import { isAuthenticated } from "./auth-service.js";
+import { checkProjectImport } from "./project-import-service.js";
+import { buildProjectImportPayload, CONFLICT_MESSAGES, createConflictReview } from "./import-conflict-review.js";
 
-const STEPS = ["Upload", "Map Columns", "Validate", "Preview"];
+const STEPS = ["Upload", "Map Columns", "Validate", "Preview", "Conflict Review"];
 const PAGE_SIZE = 25;
 
 function element(tag, text = "", className = "") {
@@ -30,7 +33,12 @@ export function openProjectImport() {
     step: 0, reached: 0, parsed: null, source: null, sheet: "", mappings: [],
     suggestions: [], results: null, percentMode: "percent", filter: "all", page: 1,
     busy: false, error: "", discard: null,
+    selectedRows: new Set(), namespace: "", checking: false, payload: null,
+    blockingPage: 1, warningPage: 1,
   };
+  const review = createConflictReview();
+  const reviewContent = element("section", "", "sf-import-conflict-review");
+  reviewContent.setAttribute("aria-label", "Server conflict review");
   const content = element("div", "", "sf-import-content");
   const footer = element("div", "", "sf-import-actions");
   const steps = element("ol", "", "sf-import-steps");
@@ -40,10 +48,12 @@ export function openProjectImport() {
   error.setAttribute("role", "alert");
   const heading = element("h2", "Import Projects");
   heading.id = "sf-import-title";
-  const context = element("p", `Local staging only. Financial inputs use ${APP_CONFIG.portfolio.currencyCode}. No records are written to the live portfolio.`, "sf-import-context");
+  const context = element("p", `Local staging and read-only server conflict review. Financial inputs use ${APP_CONFIG.portfolio.currencyCode}. No records are written to the live portfolio.`, "sf-import-context");
   dialog.append(heading, context, steps, status, error, content, footer);
 
   function close() {
+    window.removeEventListener("auth:changed", onAuthChanged);
+    invalidateReview();
     dialog.close();
     dialog.remove();
     state.parsed = null;
@@ -61,8 +71,54 @@ export function openProjectImport() {
   }
 
   function revalidate() {
+    invalidateReview();
     state.results = state.source ? validateImportRows(state.source, state.mappings, state.percentMode) : null;
+    state.selectedRows = new Set(state.results?.rows.filter((row) => row.status !== "error").map((row) => row.rowNumber));
     state.page = 1;
+  }
+
+  function invalidateReview() {
+    review.invalidate();
+    state.payload = null;
+    state.blockingPage = 1;
+    state.warningPage = 1;
+  }
+
+  function onAuthChanged() {
+    invalidateReview();
+    state.error = isAuthenticated() ? "Sign-in changed. Run Review Conflicts again." : "Sign in again to review conflicts. Your local staging is preserved.";
+    render();
+  }
+
+  function canReview() {
+    return !state.busy && isAuthenticated() && !!state.source && !!state.results
+      && !state.results.mappingIssues.length && !state.results.summary.error && state.selectedRows.size > 0;
+  }
+
+  async function reviewConflicts() {
+    if (!canReview()) return;
+    invalidateReview();
+    const revision = review.revision;
+    state.error = "";
+    try {
+      const payload = buildProjectImportPayload({
+        results: state.results, selectedRows: state.selectedRows, fileName: state.parsed.name,
+        worksheetName: state.parsed.type === "XLSX" ? state.sheet : null, sourceNamespace: state.namespace,
+      });
+      state.busy = true;
+      state.checking = true;
+      state.step = 4;
+      state.reached = 4;
+      render();
+      const analysis = await checkProjectImport(payload);
+      if (review.accept(analysis, revision)) state.payload = payload;
+    } catch (failure) {
+      if (revision === review.revision) state.error = failure.message || "Conflict review could not be completed.";
+    } finally {
+      state.busy = false;
+      state.checking = false;
+      render("sf-import-review-action");
+    }
   }
 
   function selectSheet(name) {
@@ -86,6 +142,7 @@ export function openProjectImport() {
       // Check the default worksheet before replacing the current staging state.
       parsed.readSheet(parsed.sheetNames[0]);
       state.parsed = parsed;
+      state.namespace = "";
       state.percentMode = "percent";
       selectSheet(parsed.sheetNames[0]);
     } catch (failure) {
@@ -245,11 +302,28 @@ export function openProjectImport() {
     const head = element("thead");
     const headings = element("tr");
     const columns = preview ? ["Source Row", "Status", "projectName", "projectManager", "projectType", `budgetBAC (${APP_CONFIG.portfolio.currencyCode})`, "percentComplete (0-1)", "riskScore", "endDate", "Issues"] : ["Source Row", "Status", "Project Name", "Issues"];
+    if (preview) columns.unshift("Select");
     columns.forEach((label) => { const th = element("th", label); th.scope = "col"; headings.append(th); });
     head.append(headings);
     const body = element("tbody");
     slice.forEach((row) => {
       const tr = element("tr");
+      if (preview) {
+        const td = element("td", "", "sf-import-selection-cell");
+        const select = element("input");
+        select.type = "checkbox";
+        select.id = `sf-import-select-${row.rowNumber}`;
+        select.setAttribute("aria-label", `Select source row ${row.rowNumber}: ${row.project.projectName || "Unnamed project"}`);
+        select.checked = state.selectedRows.has(row.rowNumber);
+        select.disabled = row.status === "error";
+        select.addEventListener("change", () => {
+          if (select.checked) state.selectedRows.add(row.rowNumber); else state.selectedRows.delete(row.rowNumber);
+          invalidateReview();
+          render(select.id);
+        });
+        td.append(select);
+        tr.append(td);
+      }
       const label = `${row.status[0].toUpperCase()}${row.status.slice(1)}`;
       const values = preview ? [row.rowNumber, label, row.project.projectName, row.project.projectManager, row.project.projectType,
         row.project.budgetBAC, row.project.percentComplete, row.project.riskScore, row.project.endDate]
@@ -282,6 +356,120 @@ export function openProjectImport() {
     content.append(field, wrap, pagination);
   }
 
+  function renderNamespace() {
+    const field = element("label", "Source namespace (Optional)", "sf-import-field sf-import-namespace");
+    const input = element("input");
+    input.type = "text";
+    input.id = "sf-import-namespace";
+    input.maxLength = 128;
+    input.value = state.namespace;
+    input.setAttribute("aria-describedby", "sf-import-namespace-help");
+    const help = element("small", "Helps recognize previously imported source IDs. Leave blank to keep source IDs as provenance only.");
+    help.id = "sf-import-namespace-help";
+    input.addEventListener("input", () => {
+      state.namespace = input.value;
+      invalidateReview();
+      state.error = "";
+      error.hidden = true;
+      renderConflictResults();
+    });
+    field.append(input, help);
+    content.append(field);
+  }
+
+  function renderConflictList(items, warning) {
+    const section = element("section", "", "sf-import-conflict-section");
+    section.append(element("h4", `${warning ? "Duplicate warnings" : "Blocking conflicts"} (${items.length})`));
+    const pageKey = warning ? "warningPage" : "blockingPage";
+    const pages = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+    state[pageKey] = Math.min(state[pageKey], pages);
+    const list = element("ul", "", "sf-import-conflict-list");
+    items.slice((state[pageKey] - 1) * PAGE_SIZE, state[pageKey] * PAGE_SIZE).forEach((item) => {
+      const entry = element("li", "", warning ? "sf-import-conflict-warning" : "sf-import-conflict-blocking");
+      entry.append(element("strong", CONFLICT_MESSAGES[item.code]));
+      const rows = item.source_rows || [item.source_row];
+      entry.append(element("p", `Source ${rows.length > 1 ? "rows" : "row"}: ${rows.join(", ")}`));
+      const incomingIds = state.payload.rows.filter((row) => rows.includes(row.source_row) && row.source_project_id)
+        .map((row) => `Row ${row.source_row}: ${row.source_project_id}`);
+      if (incomingIds.length) entry.append(element("p", `Source Project ID: ${incomingIds.join("; ")}`));
+      const existing = [["Project", item.existing_project_id], ["Name", item.existing_project_name],
+        ["Manager", item.existing_project_manager], ["Start date", item.existing_start_date]]
+        .filter(([, value]) => value).map(([label, value]) => `${label}: ${value}`);
+      if (existing.length) entry.append(element("p", existing.join(" | ")));
+      if (warning) {
+        const label = element("label", "", "sf-import-acknowledgement");
+        const check = element("input");
+        check.type = "checkbox";
+        check.setAttribute("aria-label", `Acknowledge warning for source ${rows.length > 1 ? "rows" : "row"} ${rows.join(", ")}${item.existing_project_id ? `, existing project ${item.existing_project_id}` : ""}: ${CONFLICT_MESSAGES[item.code]}`);
+        check.checked = review.isAcknowledged(item.conflict_id);
+        check.value = item.conflict_id;
+        check.addEventListener("change", () => {
+          review.acknowledge(item.conflict_id, check.checked);
+          updateReadiness();
+        });
+        label.append(check, element("span", "I reviewed this warning and intend to create a separate project."));
+        entry.append(label);
+      }
+      list.append(entry);
+    });
+    section.append(list);
+    if (pages > 1) {
+      const controls = element("div", "", "sf-import-pagination");
+      const previous = button("Previous", () => { state[pageKey] -= 1; renderConflictResults(); reviewContent.querySelector("h4")?.focus(); });
+      const next = button("Next", () => { state[pageKey] += 1; renderConflictResults(); reviewContent.querySelector("h4")?.focus(); });
+      previous.disabled = state[pageKey] <= 1;
+      next.disabled = state[pageKey] >= pages;
+      previous.setAttribute("aria-label", `Previous ${warning ? "warnings" : "blocking conflicts"} page`);
+      next.setAttribute("aria-label", `Next ${warning ? "warnings" : "blocking conflicts"} page`);
+      controls.append(previous, element("span", `Page ${state[pageKey]} of ${pages}`), next);
+      section.append(controls);
+    }
+    section.querySelector("h4").tabIndex = -1;
+    return section;
+  }
+
+  function updateReadiness() {
+    const target = reviewContent.querySelector("[data-import-readiness]");
+    if (!target) return;
+    const analysis = review.analysis;
+    const summary = element("dl", "", "sf-import-conflict-summary");
+    [["Rows selected", state.selectedRows.size], ["Blocking conflicts", analysis.blocking_count],
+      ["Warnings", analysis.warning_count], ["Acknowledged", `${review.acknowledgedCount} of ${analysis.warning_count}`],
+      ["Server check", "Complete"]].forEach(([label, value]) => summary.append(element("dt", label), element("dd", String(value))));
+    target.replaceChildren(summary, element("p", analysis.blocking_count ? "Safe Import cannot continue. Blocking conflicts cannot be overridden."
+      : review.ready ? "Ready for final confirmation. No records have been imported."
+        : "Review and acknowledge every duplicate warning before final confirmation."));
+  }
+
+  function renderConflictResults() {
+    reviewContent.replaceChildren();
+    if (!review.analysis) {
+      reviewContent.append(element("p", state.checking ? "Checking selected rows against live projects..."
+        : "A successful server check is required. Run Review Conflicts for the current staging and selection.", "sf-import-context"));
+      return;
+    }
+    const readiness = element("div");
+    readiness.dataset.importReadiness = "";
+    readiness.setAttribute("role", "status");
+    reviewContent.append(readiness);
+    updateReadiness();
+    const analysis = review.analysis;
+    if (analysis.blocking_count) reviewContent.append(renderConflictList(analysis.blocking_conflicts, false));
+    if (analysis.warning_count) {
+      reviewContent.append(element("p", "Acknowledgement means you reviewed a duplicate warning and intend to create a separate new project. It does not merge or resolve an existing project.", "sf-import-context"));
+      const acknowledgeAll = button("Acknowledge all warnings", () => {
+        review.acknowledgeAll();
+        renderConflictResults();
+        document.getElementById("sf-import-acknowledge-all")?.focus();
+      });
+      acknowledgeAll.id = "sf-import-acknowledge-all";
+      reviewContent.append(acknowledgeAll);
+      reviewContent.append(renderConflictList(analysis.warnings, true));
+    } else if (!analysis.blocking_count) {
+      reviewContent.append(element("p", "No blocking conflicts or duplicate warnings were found.", "sf-import-ready"));
+    }
+  }
+
   function render(focusId = null) {
     steps.replaceChildren();
     STEPS.forEach((name, index) => {
@@ -294,17 +482,32 @@ export function openProjectImport() {
     });
     error.textContent = state.error;
     error.hidden = !state.error;
-    status.textContent = state.busy ? "Reading file locally..." : state.parsed ? `${state.parsed.name} | ${state.parsed.type} | ${state.sheet} | ${state.source.rows.length} rows` : "No file selected";
+    status.textContent = state.checking ? "Checking conflicts with the server..." : state.busy ? "Reading file locally..." : state.parsed ? `${state.parsed.name} | ${state.parsed.type} | ${state.sheet} | ${state.source.rows.length} rows` : "No file selected";
     dialog.setAttribute("aria-busy", String(state.busy));
     content.replaceChildren();
     footer.replaceChildren();
     if (state.step === 0) content.append(filePicker());
     else if (state.step === 1) renderMappings();
-    else {
+    else if (state.step === 4) {
+      content.append(element("h3", "Conflict Review"));
+      renderNamespace();
+      content.append(reviewContent);
+      renderConflictResults();
+    } else {
       content.append(element("h3", STEPS[state.step]), summary(), mappingIssues());
       if (state.step === 3) content.append(element("p", state.results.summary.error ? "Preparation needs attention. No records have been imported."
         : state.results.summary.warning ? "Preparation complete with warnings to review. No records have been imported."
           : "Import preparation complete. No records have been imported.", "sf-import-context"));
+      if (state.step === 3) {
+        renderNamespace();
+        const selection = element("div", "", "sf-import-pagination");
+        selection.append(element("span", `${state.selectedRows.size} rows selected`),
+          button("Select all eligible rows", () => {
+            state.selectedRows = new Set(state.results.rows.filter((row) => row.status !== "error").map((row) => row.rowNumber));
+            invalidateReview(); render();
+          }), button("Clear selection", () => { state.selectedRows.clear(); invalidateReview(); render(); }));
+        content.append(selection);
+      }
       renderTable(state.step === 3);
     }
     if (state.discard) {
@@ -321,14 +524,21 @@ export function openProjectImport() {
       if (state.source && state.step < 3) footer.append(button(`Continue to ${STEPS[state.step + 1]}`, () => {
         state.step += 1; state.reached = Math.max(state.reached, state.step); state.error = ""; render();
       }, "sf-import-primary"));
-      if (state.step === 3) footer.append(button("Return to Projects", () => confirmDiscard(close), "sf-import-primary"));
+      if (state.step >= 3) {
+        const action = button("Review Conflicts", reviewConflicts, "sf-import-primary");
+        action.id = "sf-import-review-action";
+        action.disabled = !canReview();
+        footer.append(action, button("Return to Projects", () => confirmDiscard(close)));
+        if (!isAuthenticated()) content.append(element("p", "Sign in to review conflicts. Local staging remains available.", "sf-import-context"));
+      }
     }
-    footer.querySelectorAll("button").forEach((control) => { control.disabled = state.busy; });
+    if (state.busy) dialog.querySelectorAll("button, input, select").forEach((control) => { control.disabled = true; });
     if (focusId) document.getElementById(focusId)?.focus();
     else content.querySelector("input, select")?.focus();
   }
 
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); confirmDiscard(close); });
+  window.addEventListener("auth:changed", onAuthChanged);
   document.body.append(dialog);
   render();
   dialog.showModal();

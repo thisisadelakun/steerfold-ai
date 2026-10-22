@@ -5994,7 +5994,7 @@ select {
 .sf-import-dialog small { color: var(--sf-text-secondary); font-size: 0.84rem; line-height: 1.5; overflow-wrap: anywhere; }
 .sf-import-error { color: var(--sf-danger); overflow-wrap: anywhere; }
 .sf-import-ready { color: var(--sf-success); }
-.sf-import-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 22px 0; padding: 0; list-style: none; }
+.sf-import-steps { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; margin: 22px 0; padding: 0; list-style: none; }
 .sf-import-steps li { min-width: 0; }
 .sf-import-steps button { width: 100%; text-align: left; }
 .sf-import-steps [aria-current="step"] { border-color: var(--sf-accent); color: var(--sf-accent); font-weight: 700; box-shadow: inset 0 -2px var(--sf-accent); }
@@ -6002,7 +6002,21 @@ select {
 .sf-import-dropzone { display: grid; gap: 12px; min-width: 0; padding: 28px 20px; border: 1px dashed var(--sf-accent); border-radius: var(--sf-radius-sm); background: var(--sf-bg); }
 .sf-import-dropzone input { min-width: 0; max-width: 100%; color: var(--sf-text-primary); }
 .sf-import-field { display: grid; gap: 6px; min-width: 0; color: var(--sf-text-secondary); font-size: 0.82rem; }
-.sf-import-field select { width: 100%; min-width: 0; min-height: 40px; padding: 8px; border: 1px solid var(--sf-border); border-radius: var(--sf-radius-sm); background: var(--sf-surface-elevated); color: var(--sf-text-primary); font: inherit; }
+.sf-import-field select,
+.sf-import-namespace input { width: 100%; min-width: 0; min-height: 40px; padding: 8px; border: 1px solid var(--sf-border); border-radius: var(--sf-radius-sm); background: var(--sf-surface-elevated); color: var(--sf-text-primary); font: inherit; box-sizing: border-box; }
+.sf-import-namespace { max-width: 520px; }
+.sf-import-conflict-review { min-width: 0; border-top: 1px solid var(--sf-border); padding-top: 16px; }
+.sf-import-conflict-summary { display: grid; grid-template-columns: minmax(0, max-content) minmax(0, 1fr); gap: 8px 20px; max-width: 480px; font-size: 0.85rem; }
+.sf-import-conflict-summary dt { color: var(--sf-text-secondary); }
+.sf-import-conflict-summary dd { margin: 0; font-weight: 650; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sf-import-conflict-section h4 { margin: 20px 0 12px; }
+.sf-import-conflict-list { display: grid; gap: 12px; list-style: none; margin: 0 0 12px; padding: 0; }
+.sf-import-conflict-list > li { min-width: 0; padding: 14px; border: 1px solid var(--sf-border); border-radius: var(--sf-radius-sm); border-left: 3px solid var(--sf-warning); background: var(--sf-surface-elevated); font-size: 0.85rem; overflow-wrap: anywhere; }
+.sf-import-conflict-list .sf-import-conflict-blocking { border-left-color: var(--sf-danger); }
+.sf-import-conflict-list p { margin: 8px 0; color: var(--sf-text-secondary); }
+.sf-import-acknowledgement { display: flex; align-items: flex-start; gap: 10px; min-width: 0; min-height: 40px; margin-top: 12px; cursor: pointer; }
+.sf-import-acknowledgement input,
+.sf-import-selection-cell input { flex: 0 0 auto; width: 18px; height: 18px; accent-color: var(--sf-accent); cursor: pointer; }
 .sf-import-mappings { display: grid; gap: 12px; min-width: 0; }
 .sf-import-mapping { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; gap: 12px; padding-bottom: 12px; border-bottom: 1px solid var(--sf-border); }
 .sf-import-mapping > div { display: grid; gap: 4px; min-width: 0; overflow-wrap: anywhere; }
