@@ -1,9 +1,10 @@
 import { APP_CONFIG } from "./app-config.js";
 import { parseImportFile } from "./import-parser.js";
 import { IMPORT_FIELDS, suggestImportMappings, validateImportRows } from "./import-validation.js";
-import { isAuthenticated } from "./auth-service.js";
-import { checkProjectImport } from "./project-import-service.js";
+import { getCurrentUser, isAuthenticated } from "./auth-service.js";
+import { checkProjectImport, commitProjectImport, getProjectImportResult } from "./project-import-service.js";
 import { buildProjectImportPayload, CONFLICT_MESSAGES, createConflictReview } from "./import-conflict-review.js";
+import { createImportAttempt, normalizeProjectImportResult } from "./import-commit-state.js";
 
 const STEPS = ["Upload", "Map Columns", "Validate", "Preview", "Conflict Review"];
 const PAGE_SIZE = 25;
@@ -22,8 +23,12 @@ function button(text, handler, className = "") {
   return node;
 }
 
-export function openProjectImport() {
-  if (document.getElementById("sf-project-import")) return;
+export function openProjectImport({ onImported, onViewProjects } = {}) {
+  const existing = document.getElementById("sf-project-import");
+  if (existing) {
+    if (!existing.open) { existing.showModal(); existing.querySelector("button:not([disabled])")?.focus(); }
+    return;
+  }
   const opener = document.activeElement;
   const dialog = element("dialog", "", "sf-import-dialog");
   dialog.id = "sf-project-import";
@@ -35,8 +40,10 @@ export function openProjectImport() {
     busy: false, error: "", discard: null,
     selectedRows: new Set(), namespace: "", checking: false, payload: null,
     blockingPage: 1, warningPage: 1,
+    committing: false, recovering: false, resultPage: 1, refreshError: "",
   };
   const review = createConflictReview();
+  const attempt = createImportAttempt();
   const reviewContent = element("section", "", "sf-import-conflict-review");
   reviewContent.setAttribute("aria-label", "Server conflict review");
   const content = element("div", "", "sf-import-content");
@@ -48,11 +55,19 @@ export function openProjectImport() {
   error.setAttribute("role", "alert");
   const heading = element("h2", "Import Projects");
   heading.id = "sf-import-title";
-  const context = element("p", `Local staging and read-only server conflict review. Financial inputs use ${APP_CONFIG.portfolio.currencyCode}. No records are written to the live portfolio.`, "sf-import-context");
+  const context = element("p", `Financial inputs use ${APP_CONFIG.portfolio.currencyCode}. Projects are created only after server conflict review and your explicit final confirmation.`, "sf-import-context");
   dialog.append(heading, context, steps, status, error, content, footer);
 
   function close() {
+    if (state.busy) return;
+    // Keep the same in-memory attempt available while the user signs in again.
+    if (attempt.uncertain) {
+      dialog.close();
+      if (opener?.isConnected) opener.focus();
+      return;
+    }
     window.removeEventListener("auth:changed", onAuthChanged);
+    window.removeEventListener("beforeunload", onBeforeUnload);
     invalidateReview();
     dialog.close();
     dialog.remove();
@@ -77,7 +92,9 @@ export function openProjectImport() {
     state.page = 1;
   }
 
-  function invalidateReview() {
+  function invalidateReview({ material = true } = {}) {
+    if (material) attempt.invalidate();
+    else attempt.confirm(false);
     review.invalidate();
     state.payload = null;
     state.blockingPage = 1;
@@ -85,19 +102,25 @@ export function openProjectImport() {
   }
 
   function onAuthChanged() {
+    if (attempt.snapshot && (attempt.busy || attempt.uncertain || attempt.result)) {
+      state.error = sameActor() ? "Account restored. Recover the existing import result before starting another import."
+        : "Sign in with the account that started this import. Its key and recovery state have been preserved in this tab.";
+      render();
+      return;
+    }
     invalidateReview();
     state.error = isAuthenticated() ? "Sign-in changed. Run Review Conflicts again." : "Sign in again to review conflicts. Your local staging is preserved.";
     render();
   }
 
   function canReview() {
-    return !state.busy && isAuthenticated() && !!state.source && !!state.results
+    return !state.busy && !attempt.uncertain && !attempt.result && isAuthenticated() && !!state.source && !!state.results
       && !state.results.mappingIssues.length && !state.results.summary.error && state.selectedRows.size > 0;
   }
 
   async function reviewConflicts() {
     if (!canReview()) return;
-    invalidateReview();
+    invalidateReview({ material: false });
     const revision = review.revision;
     state.error = "";
     try {
@@ -119,6 +142,123 @@ export function openProjectImport() {
       state.checking = false;
       render("sf-import-review-action");
     }
+  }
+
+  function onBeforeUnload(event) {
+    if (!attempt.busy && !attempt.uncertain) return;
+    event.preventDefault();
+    event.returnValue = "";
+  }
+
+  function sameActor() {
+    return isAuthenticated() && getCurrentUser()?.id === attempt.snapshot?.actorId;
+  }
+
+  function currentPayload() {
+    return buildProjectImportPayload({ results: state.results, selectedRows: state.selectedRows,
+      fileName: state.parsed.name, worksheetName: state.parsed.type === "XLSX" ? state.sheet : null,
+      sourceNamespace: state.namespace });
+  }
+
+  function canCommit() {
+    return !state.busy && sameActor() && review.ready && attempt.confirmed && !attempt.result
+      && attempt.snapshot.payloadHash === review.analysis.payload_hash;
+  }
+
+  async function refreshPortfolio() {
+    state.refreshError = "";
+    try {
+      if (typeof onImported !== "function") throw new Error("No portfolio refresh handler is available.");
+      await onImported(attempt.result);
+    } catch {
+      state.refreshError = "Import completed, but Steerfold could not refresh the portfolio automatically.";
+    }
+  }
+
+  async function finishImport(value) {
+    const snapshot = attempt.snapshot;
+    const result = normalizeProjectImportResult(value, { idempotencyKey: snapshot.idempotencyKey,
+      payloadHash: snapshot.payloadHash, payload: snapshot.payload, actorId: snapshot.actorId });
+    attempt.complete(result);
+    state.committing = false;
+    state.error = "";
+    state.resultPage = 1;
+    render();
+    await refreshPortfolio();
+  }
+
+  async function reconcileImport() {
+    state.recovering = true;
+    state.committing = false;
+    render();
+    try {
+      const snapshot = attempt.recover(getCurrentUser()?.id);
+      const value = await getProjectImportResult(snapshot.idempotencyKey);
+      if (value.status === "not_found") {
+        attempt.fail(true);
+        state.error = "No committed result is visible yet. The original request may still be running. Check again or Retry Import using the same key; do not start another import.";
+      } else await finishImport(value);
+    } catch (failure) {
+      attempt.fail(true);
+      state.error = `${failure.message || "Recovery is unavailable."} The original outcome remains uncertain; the same import key is preserved.`;
+    } finally { state.recovering = false; }
+  }
+
+  async function recoverImport() {
+    if (state.busy || !attempt.uncertain || !sameActor()) return;
+    state.busy = true;
+    state.error = "";
+    try { await reconcileImport(); }
+    finally { state.busy = false; render("sf-import-recover"); }
+  }
+
+  async function submitImport() {
+    if (!canCommit()) return;
+    let snapshot;
+    try {
+      if (JSON.stringify(currentPayload()) !== JSON.stringify(state.payload)) {
+        throw new Error("Staging changed. Run Review Conflicts again before importing.");
+      }
+      snapshot = attempt.begin({ payload: state.payload, ready: review.ready, actorId: getCurrentUser()?.id });
+    } catch (failure) {
+      if (!attempt.uncertain) invalidateReview();
+      state.error = failure.message;
+      render();
+      return;
+    }
+    state.busy = true;
+    state.committing = true;
+    state.error = "";
+    state.discard = null;
+    render();
+    try {
+      const value = await commitProjectImport(snapshot);
+      try { await finishImport(value); }
+      catch { attempt.fail(true); await reconcileImport(); }
+    } catch (failure) {
+      const wasUncertain = attempt.uncertain;
+      attempt.fail(failure.uncertain === true);
+      if (attempt.uncertain) {
+        state.error = failure.message;
+        await reconcileImport();
+      } else {
+        if (failure.requiresReview && !wasUncertain) invalidateReview({ material: false });
+        state.error = failure.message || "The import request failed. No successful result was confirmed.";
+      }
+    } finally {
+      state.busy = false;
+      state.committing = false;
+      render(attempt.result ? "sf-import-complete-title" : attempt.uncertain ? "sf-import-recover" : "sf-import-review-action");
+    }
+  }
+
+  function resetImport() {
+    if (state.busy || attempt.uncertain) return;
+    invalidateReview();
+    Object.assign(state, { step: 0, reached: 0, parsed: null, source: null, sheet: "", mappings: [],
+      suggestions: [], results: null, selectedRows: new Set(), namespace: "", percentMode: "percent",
+      filter: "all", page: 1, error: "", discard: null, resultPage: 1, refreshError: "" });
+    render();
   }
 
   function selectSheet(name) {
@@ -301,7 +441,7 @@ export function openProjectImport() {
     table.append(element("caption", preview ? "Normalized project preview" : "Row validation results"));
     const head = element("thead");
     const headings = element("tr");
-    const columns = preview ? ["Source Row", "Status", "projectName", "projectManager", "projectType", `budgetBAC (${APP_CONFIG.portfolio.currencyCode})`, "percentComplete (0-1)", "riskScore", "endDate", "Issues"] : ["Source Row", "Status", "Project Name", "Issues"];
+    const columns = preview ? ["Source Row", "Status", "Project Name", "Project Manager", "Project Type", `Budget (BAC) (${APP_CONFIG.portfolio.currencyCode})`, "Complete %", "Risk Score", "End Date", "Issues"] : ["Source Row", "Status", "Project Name", "Issues"];
     if (preview) columns.unshift("Select");
     columns.forEach((label) => { const th = element("th", label); th.scope = "col"; headings.append(th); });
     head.append(headings);
@@ -326,7 +466,7 @@ export function openProjectImport() {
       }
       const label = `${row.status[0].toUpperCase()}${row.status.slice(1)}`;
       const values = preview ? [row.rowNumber, label, row.project.projectName, row.project.projectManager, row.project.projectType,
-        row.project.budgetBAC, row.project.percentComplete, row.project.riskScore, row.project.endDate]
+        row.project.budgetBAC, Number.isFinite(row.project.percentComplete) ? `${Number((row.project.percentComplete * 100).toFixed(6))}%` : null, row.project.riskScore, row.project.endDate]
         : [row.rowNumber, label, row.project.projectName];
       values.forEach((value, index) => {
         const td = element("td", String(value ?? "--"));
@@ -406,6 +546,7 @@ export function openProjectImport() {
         check.addEventListener("change", () => {
           review.acknowledge(item.conflict_id, check.checked);
           updateReadiness();
+          renderFinalConfirmation();
         });
         label.append(check, element("span", "I reviewed this warning and intend to create a separate project."));
         entry.append(label);
@@ -468,6 +609,110 @@ export function openProjectImport() {
     } else if (!analysis.blocking_count) {
       reviewContent.append(element("p", "No blocking conflicts or duplicate warnings were found.", "sf-import-ready"));
     }
+    const confirmation = element("section", "", "sf-import-confirmation");
+    confirmation.id = "sf-import-final-confirmation";
+    reviewContent.append(confirmation);
+    renderFinalConfirmation();
+  }
+
+  function renderFinalConfirmation() {
+    const target = reviewContent.querySelector("#sf-import-final-confirmation");
+    if (!target) return;
+    target.replaceChildren();
+    if (!review.ready) { attempt.confirm(false); return; }
+    try {
+      attempt.prepare({ payload: state.payload, payloadHash: review.analysis.payload_hash,
+        acknowledgements: review.analysis.warnings.map((warning) => warning.conflict_id), actorId: getCurrentUser()?.id });
+    } catch (failure) {
+      const message = element("p", failure.message, "sf-import-error");
+      message.setAttribute("role", "alert"); target.append(message); return;
+    }
+    target.append(element("h4", "Final confirmation"));
+    const summary = element("dl", "", "sf-import-conflict-summary");
+    [["Rows selected", state.payload.rows.length], ["Source namespace", state.payload.source_namespace || "None"],
+      ["Warnings acknowledged", `${review.acknowledgedCount} of ${review.analysis.warning_count}`],
+      ["Server conflict check", "Complete"], ["Currency", "CAD"]]
+      .forEach(([label, value]) => summary.append(element("dt", label), element("dd", String(value))));
+    target.append(summary, element("p", "New projects will be created. Existing projects will not be updated or merged."),
+      element("p", "Steerfold will generate new project IDs."));
+    const label = element("label", "", "sf-import-acknowledgement");
+    const check = element("input");
+    check.type = "checkbox";
+    check.id = "sf-import-confirm-create";
+    check.checked = attempt.confirmed;
+    label.append(check, element("span", "I confirm that I want to create these projects as new Steerfold projects."));
+    const action = button("Import Projects", submitImport, "sf-import-primary");
+    action.id = "sf-import-commit";
+    action.disabled = !canCommit();
+    check.addEventListener("change", () => { attempt.confirm(check.checked); action.disabled = !canCommit(); });
+    target.append(label, action);
+  }
+
+  function renderRecovery() {
+    content.append(element("h3", "Import outcome not yet confirmed"),
+      element("p", "Staging is locked to protect against duplicate creation. Recovery and retries reuse the exact original payload, acknowledgements and import key.", "sf-import-context"));
+    const details = element("details", "", "sf-import-recovery-details");
+    details.append(element("summary", "Recovery details"), element("p", `Import key: ${attempt.snapshot.idempotencyKey}`),
+      element("p", "Recovery is kept in this browser tab. Do not reload or start another import until the outcome is resolved."));
+    content.append(details);
+    const recover = button("Check Import Result", recoverImport);
+    recover.id = "sf-import-recover";
+    recover.disabled = !sameActor();
+    const retry = button("Retry Import", submitImport, "sf-import-primary");
+    retry.disabled = !canCommit();
+    footer.append(recover, retry, button("Close (keep recovery)", close));
+  }
+
+  function renderComplete() {
+    const result = attempt.result;
+    const title = element("h3", "Import Complete");
+    title.id = "sf-import-complete-title";
+    title.tabIndex = -1;
+    content.append(title, element("p", `${result.rows_imported} projects imported.`, "sf-import-ready"));
+    const summary = element("dl", "", "sf-import-conflict-summary");
+    [["Import ID", result.import_id], ["Committed", new Date(result.committed_at).toLocaleString(APP_CONFIG.portfolio.locale)],
+      ["Source namespace", result.source_namespace || "None"], ["Currency", result.currency_code]]
+      .forEach(([label, value]) => summary.append(element("dt", label), element("dd", value)));
+    content.append(summary);
+    if (result.replayed) content.append(element("p", "This import had already been committed. Steerfold restored the original result.", "sf-import-context"));
+    if (state.refreshError) {
+      const message = element("p", state.refreshError, "sf-import-error");
+      message.setAttribute("role", "alert");
+      content.append(message, button("Retry Portfolio Refresh", async () => {
+        if (state.busy) return;
+        state.busy = true; render();
+        try { await refreshPortfolio(); } finally { state.busy = false; render(); }
+      }));
+    }
+    const wrap = element("div", "", "sf-import-table-wrap");
+    const table = element("table", "", "sf-import-table sf-import-result-table");
+    table.append(element("caption", "Created projects"));
+    const head = element("thead");
+    const headings = element("tr");
+    ["Source Row", "Source Project ID", "Steerfold Project ID", "Project Name"].forEach((label) => {
+      const th = element("th", label); th.scope = "col"; headings.append(th);
+    });
+    head.append(headings);
+    const body = element("tbody");
+    const pages = Math.ceil(result.rows.length / PAGE_SIZE);
+    result.rows.slice((state.resultPage - 1) * PAGE_SIZE, state.resultPage * PAGE_SIZE).forEach((row) => {
+      const tr = element("tr");
+      [row.source_row, row.source_project_id || "None", row.project_id, row.project_name]
+        .forEach((value) => tr.append(element("td", String(value))));
+      body.append(tr);
+    });
+    table.append(head, body); wrap.append(table); content.append(wrap);
+    if (pages > 1) {
+      const pagination = element("div", "", "sf-import-pagination");
+      const previous = button("Previous", () => { state.resultPage -= 1; render(); });
+      const next = button("Next", () => { state.resultPage += 1; render(); });
+      previous.disabled = state.resultPage <= 1; next.disabled = state.resultPage >= pages;
+      previous.setAttribute("aria-label", "Previous imported projects page");
+      next.setAttribute("aria-label", "Next imported projects page");
+      pagination.append(previous, element("span", `Page ${state.resultPage} of ${pages}`), next); content.append(pagination);
+    }
+    footer.append(button("View Projects", () => { if (state.busy) return; close(); onViewProjects?.(); }, "sf-import-primary"),
+      button("Start Another Import", resetImport), button("Close", close));
   }
 
   function render(focusId = null) {
@@ -476,17 +721,23 @@ export function openProjectImport() {
       const item = element("li");
       const needsAttention = state.results && ((index === 1 && state.results.mappingIssues.length) || (index === 2 && state.results.summary.error));
       const control = button(`${index + 1}. ${name}${needsAttention && index <= state.reached ? " - Needs attention" : index < state.step ? " - Complete" : ""}`, () => { state.step = index; state.error = ""; state.discard = null; render(); });
-      control.disabled = state.busy || index > state.reached;
+      control.disabled = state.busy || attempt.uncertain || !!attempt.result || index > state.reached;
       if (index === state.step) control.setAttribute("aria-current", "step");
       item.append(control); steps.append(item);
     });
     error.textContent = state.error;
     error.hidden = !state.error;
-    status.textContent = state.checking ? "Checking conflicts with the server..." : state.busy ? "Reading file locally..." : state.parsed ? `${state.parsed.name} | ${state.parsed.type} | ${state.sheet} | ${state.source.rows.length} rows` : "No file selected";
+    status.textContent = state.recovering ? "Recovering the existing import result..." : state.committing ? `Creating ${attempt.snapshot.payload.rows.length} projects securely...`
+      : attempt.result ? state.busy ? "Refreshing the live portfolio..." : "Import committed."
+        : state.checking ? "Checking conflicts with the server..." : state.busy ? "Reading file locally..." : state.parsed ? `${state.parsed.name} | ${state.parsed.type} | ${state.sheet} | ${state.source.rows.length} rows` : "No file selected";
     dialog.setAttribute("aria-busy", String(state.busy));
     content.replaceChildren();
     footer.replaceChildren();
-    if (state.step === 0) content.append(filePicker());
+    if (attempt.result) {
+      if (sameActor()) renderComplete();
+      else { content.append(element("p", "Import completed. Sign in with the original account to view its result.")); footer.append(button("Close", close)); }
+    } else if (attempt.uncertain) renderRecovery();
+    else if (state.step === 0) content.append(filePicker());
     else if (state.step === 1) renderMappings();
     else if (state.step === 4) {
       content.append(element("h3", "Conflict Review"));
@@ -510,7 +761,9 @@ export function openProjectImport() {
       }
       renderTable(state.step === 3);
     }
-    if (state.discard) {
+    if (attempt.result || attempt.uncertain) {
+      // Completed and uncertain attempts expose only their dedicated actions.
+    } else if (state.discard) {
       footer.append(element("p", "Discard the current staging or mapping changes?", "sf-import-discard"));
       footer.append(button("Keep Staging", () => { state.discard = null; render(); }), button("Discard Changes", () => {
         const action = state.discard;
@@ -537,8 +790,9 @@ export function openProjectImport() {
     else content.querySelector("input, select")?.focus();
   }
 
-  dialog.addEventListener("cancel", (event) => { event.preventDefault(); confirmDiscard(close); });
+  dialog.addEventListener("cancel", (event) => { event.preventDefault(); if (attempt.uncertain || attempt.result) close(); else confirmDiscard(close); });
   window.addEventListener("auth:changed", onAuthChanged);
+  window.addEventListener("beforeunload", onBeforeUnload);
   document.body.append(dialog);
   render();
   dialog.showModal();

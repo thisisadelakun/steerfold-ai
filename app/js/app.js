@@ -2707,7 +2707,16 @@ renderProjectsPageActions() {
   importButton.type = "button";
   importButton.className = "sf-project-import-button";
   importButton.textContent = "Import Projects";
-  importButton.addEventListener("click", () => openProjectImport());
+  importButton.addEventListener("click", () => openProjectImport({
+    onImported: async (result) => {
+      await this.loadDashboard({ allowCsvFallback: false });
+      const projectIds = new Set(this.state.projects.map((project) => project.projectId));
+      if (result.rows.some((row) => !projectIds.has(row.project_id))) {
+        throw new Error("The refreshed portfolio does not contain every imported project.");
+      }
+    },
+    onViewProjects: () => this.navigateToProjects(),
+  }));
   const actions = document.createElement("div");
   actions.className = "sf-project-management-actions";
   actions.append(button, importButton);

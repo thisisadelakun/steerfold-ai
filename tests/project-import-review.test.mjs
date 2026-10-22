@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
 import vm from "node:vm";
+import { normalizeProjectImportResult } from "../app/js/import-commit-state.js";
 import { buildProjectImportPayload, normalizeImportAnalysis, createConflictReview } from "../app/js/import-conflict-review.js";
 
 const project = {
@@ -123,7 +124,8 @@ async function service({ token = "fixture-token", authError = false, status = 20
       ? { SUPABASE_URL: "https://fixture.invalid", SUPABASE_PUBLISHABLE_KEY: "publishable-fixture" }
       : specifier === "./auth-service.js"
         ? { getValidAccessToken: async () => { if (authError) throw new Error("refresh failed"); return token; } }
-        : { normalizeImportAnalysis };
+        : specifier === "./import-commit-state.js" ? { normalizeProjectImportResult }
+          : { normalizeImportAnalysis };
     return new vm.SyntheticModule(Object.keys(exports), function () {
       for (const [name, value] of Object.entries(exports)) this.setExport(name, value);
     }, { context });
@@ -144,7 +146,7 @@ test("transport calls only the read-only check RPC with authenticated PostgREST 
   assert.equal(options.headers.Authorization, "Bearer fixture-token");
   assert.equal(options.headers["Content-Type"], "application/json");
   assert.deepEqual(JSON.parse(options.body), { p_payload: payload });
-  assert.equal(serviceSource.includes("commit_project_import"), false);
+  assert.ok(fixture.requests.every((request) => request.url.endsWith("/rpc/check_project_import")));
 });
 
 test("authentication failures do not send any RPC", async () => {

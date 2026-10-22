@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en" data-sf-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offline Safe Import UI Fixture</title>
+  <link rel="stylesheet" href="../../app/styles.css">
+  <script type="importmap">
+  {"imports": {
+    "/app/js/auth-service.js": "data:text/javascript,export function isAuthenticated(){return true} export function getCurrentUser(){return {id:'11111111-1111-4111-8111-111111111111'}}",
+    "/app/js/project-import-service.js": "/tests/fixtures/project-import-mock-service.js"
+  }}
+  </script>
+</head>
+<body>
+  <main style="padding:24px; max-width:100%; box-sizing:border-box; color:var(--sf-text-primary)">
+    <h1>Offline Safe Import UI Fixture</h1>
+    <p>No live authentication, Supabase requests or database writes.</p>
+    <label>Mock outcome
+      <select id="mock-outcome">
+        <option value="success">Success with warnings</option>
+        <option value="no-warnings">Success without warnings</option>
+        <option value="blocking">Blocking conflict</option>
+        <option value="uncertain-committed">Connection lost after mock commit</option>
+        <option value="uncertain-not-found">Uncertain outcome, then same-key retry</option>
+        <option value="validation">Definite conflict failure</option>
+        <option value="refresh-failure">Successful commit, failed refresh</option>
+      </select>
+    </label>
+    <label>Theme <select id="mock-theme"><option value="dark">Dark</option><option value="light">Light</option></select></label>
+    <button type="button" id="open-import">Open Import</button>
+    <p id="mock-counters" role="status">Mock commits: 0; recoveries: 0; refreshes: 0</p>
+  </main>
+  <script type="module">
+    import { openProjectImport } from "../../app/js/project-import.js";
+    import { refresh, renderCounters } from "./project-import-mock-service.js";
+    document.getElementById("mock-theme").addEventListener("change", (event) => { document.documentElement.dataset.sfTheme = event.target.value; });
+    document.getElementById("open-import").addEventListener("click", () => {
+      openProjectImport({ onImported: refresh, onViewProjects: renderCounters });
+      const input = document.getElementById("sf-import-file");
+      if (!input || document.getElementById("stage-synthetic")) return;
+      const stage = document.createElement("button");
+      stage.type = "button";
+      stage.id = "stage-synthetic";
+      stage.textContent = "Stage synthetic CSV (offline fixture only)";
+      stage.addEventListener("click", () => {
+        const csv = "Project ID,Project Name,Project Manager,Project Type,Strategic Priority,BAC,PV,EV,AC,Percent Complete,Risk Score,Start Date,End Date,Resource Demand,Project Status\n"
+          + "FIXTURE-1,Fixture Project One,Fixture Manager,IT,High,300000,175000,150000,190000,50,20,2026-01-02,2026-12-31,High,At Risk\n"
+          + "FIXTURE-2,Fixture Project Two,Fixture Manager,IT,Medium,120000,60000,60000,60000,50,8,2026-01-02,2026-12-31,Medium,On Track\n";
+        const transfer = new DataTransfer();
+        transfer.items.add(new File([csv], "offline-fixture.csv", { type: "text/csv" }));
+        input.files = transfer.files;
+        input.dispatchEvent(new Event("change", { bubbles: true }));
+      });
+      input.parentElement.append(stage);
+    });
+  </script>
+</body>
+</html>
