@@ -56,7 +56,7 @@ export function renderPortfolioIntelligence(container, projects, { onOpenProject
   const scheduleLeader = model.schedule[0];
   const riskLeader = model.risk[0];
   const cards = [
-    ["Cost pressure", costLeader, costLeader ? `Largest cost variance: ${money(costLeader.evm.cv)}. ${model.cost.length} below the CPI target.` : "No cost efficiency shortfalls detected."],
+    ["Cost pressure", costLeader, costLeader ? `Largest cost variance: ${money(costLeader.evm.cv)}. ${model.cost.length} ${model.cost.length === 1 ? "project is" : "projects are"} below the CPI target.` : "No cost efficiency shortfalls detected."],
     ["Schedule pressure", scheduleLeader, scheduleLeader ? `Largest earned-value schedule variance: ${money(scheduleLeader.evm.sv)}.` : "No schedule efficiency shortfalls detected."],
     ["High-risk delivery", riskLeader, riskLeader ? `Risk exposure: ${riskLeader.riskScore}/25. Confirm mitigation ownership.` : "No projects reach the configured high-risk threshold."],
     ["Forecast overrun risk", null, model.overBudget.length ? `${money(model.forecastExposure)} total forecast exposure across ${model.overBudget.length} projects, assuming current cost efficiency continues.` : "No available EAC forecast exceeds approved budget."],

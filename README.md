@@ -1,26 +1,32 @@
 # Steerfold AI
 
-Steerfold AI is an AI-enabled project portfolio intelligence application for monitoring project performance, budget, risk, forecasting, and management decision signals.
+Steerfold AI is a project portfolio intelligence application for monitoring project performance, budget, risk, forecasting, and management decision signals. Its intelligence and recommendations are deterministic and rule-based; it does not use machine learning or generative AI.
 
 Brisk & Zip is a simulated organization, and all portfolio/project figures are simulated for demonstration. The project originated as a project management portfolio/capstone and evolved into a functional web application.
 
 ## Overview
 
-Steerfold AI provides a browser-based portfolio view for tracking project health, earned value management (EVM), forecasting signals, risk visibility, and decision-support recommendations. Public users can browse the portfolio and project details, while authenticated users can create, edit, and delete project records.
+Steerfold AI helps portfolio managers identify delivery pressure, compare financial performance, and review controlled budget changes in one browser-based workspace. Public users can browse the portfolio and project details, while authenticated users can manage project records and use authorized governance actions.
 
 ## Key Features
 
-- Portfolio KPI dashboard
-- Projects table with search, filters, sorting, and pagination
+- Portfolio Intelligence with health counts, explainable attention ranking, filters, and management signals
+- Portfolio Explorer with Quick Views, combined filters, search, sorting, and pagination
 - Project detail view
 - EVM metrics and financial performance indicators
 - Forecasting views for cost and completion signals
 - Decision-support recommendations
+- What-If and Sensitivity Analysis using temporary assumptions
+- Executive, Sponsor, and Team stakeholder dashboards
+- Budget governance with persistent change requests, activity history, role controls, and separation of duties
+- Safe Import for CSV/XLSX: mapping, validation, preview, conflict review, and explicit final confirmation
 - Supabase-backed project data
 - Authenticated Create/Edit/Delete project management
 - Public read access
 - CSV fallback for demo resilience
 - Responsive design
+- Dark, Light, and System themes; display-currency preferences; current-view PDF/print export
+- Contextual Help, guided tours, and a temporary calculator
 
 ## Tech Stack
 
@@ -31,6 +37,8 @@ Steerfold AI provides a browser-based portfolio view for tracking project health
 - PostgreSQL
 - Supabase Auth
 - Supabase Row Level Security
+- Netlify Functions for reference-rate FX conversion
+- Locally bundled SheetJS and math.js for import parsing and calculator arithmetic
 
 ## Architecture
 
@@ -39,17 +47,21 @@ The application runs as a static browser app:
 ```text
 Browser
   -> JavaScript application
-  -> Supabase REST/Auth
-  -> PostgreSQL
+     -> Supabase REST/Auth -> PostgreSQL (RLS and controlled RPCs)
+     -> Same-origin Netlify FX Function -> Frankfurter reference rates
 ```
 
 The CSV file in `app/data/` is read-only fallback data used when normal public Supabase loading is unavailable.
 
+Analytics run on numeric organization-currency values before display formatting. View modules render those results; authenticated services handle writes. Post-write refreshes require Supabase and never substitute CSV. A visible notice identifies normal CSV fallback data.
+
 ## Security Model
 
-Public users can read portfolio data. Authenticated admin users can create, update, and delete projects.
+Public users can read portfolio data. Project writes and Safe Import require authentication. Governance actions additionally require the appropriate assigned roles and actor-level separation of duties; a governance administrator is not a workflow wildcard.
 
 Frontend button visibility is a user experience control only. Database authorization is enforced through Supabase Row Level Security. The browser uses only the Supabase publishable key; no `service_role` key belongs in frontend code.
+
+Safe Import creates new projects only: no merge, update, or upsert. Server validation, commit-time conflict checks, explicit warning acknowledgements, and actor-bound idempotency protect the atomic batch. Live project IDs are database-generated; optional source IDs remain provenance, with cross-import identity only when a source namespace is provided. Import history is restricted to its authenticated owner.
 
 ## Project Data
 
@@ -137,10 +149,25 @@ app/
 
 ## Current Scope
 
+- Functional portfolio demonstration with simulated data; Safe Import and Portfolio Intelligence are implemented
 - Single organization per deployment
 - No multi-tenancy yet
 - Reference-rate display conversion; authoritative financial inputs and records remain in organization currency
 - No editable organization settings UI
+
+## Portfolio Screenshots
+
+Suggested captures: Portfolio Intelligence, Portfolio Explorer, Budget & EVM, Forecasting, Decision Support, Governance, and Safe Import conflict review. Capture import review before final submission; a new live import is not needed for a screenshot.
+
+## Validation
+
+Run the existing offline regressions from the repository root (Node.js required):
+
+```sh
+node --experimental-vm-modules --test tests/*.test.mjs
+```
+
+The tests mock backend writes; they do not import projects into Supabase.
 
 ## Future Enhancements
 

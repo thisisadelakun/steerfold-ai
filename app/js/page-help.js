@@ -19,7 +19,7 @@ const HELP = {
       ["Search the portfolio", "Search by project name, ID, manager or category.", "[data-project-search]"],
       ["Combine filters", "Narrow the portfolio with the available filters; clear them to start again.", ".sf-explorer-filter-panel"],
       ["Compare and open projects", "Sort a column, browse pages and open a project name for its detail view.", ".sf-project-table"],
-      ["Add portfolio data", "When signed in, use New Project or Import Projects. Imports are staged for review, not written live.", ".sf-project-create-button, .sf-project-import-button"],
+      ["Add portfolio data", "When signed in, use New Project or Import Projects. Imports require validation, server conflict review and explicit final confirmation before new projects are created.", ".sf-project-create-button, .sf-project-import-button"],
     ],
   },
   budget: {
