@@ -59,11 +59,13 @@ class Element {
   async fire(type) {
     if (this.disabled) return;
     const event = { type, target: this, preventDefault() {}, stopPropagation() { this.stopped = true; } };
+    const pending = [];
     let current = this;
     do {
-      for (const handler of current.listeners.get(type) || []) await handler(event);
+      for (const handler of current.listeners.get(type) || []) pending.push(handler(event));
       current = event.stopped ? null : current.parent;
     } while (current);
+    await Promise.all(pending);
     await tick();
   }
   click() { return this.fire("click"); }
@@ -146,7 +148,7 @@ async function fixture({ rows = [demoRow], actor = "actor-a", listWait, activati
     button: (text, root = gate) => root.querySelectorAll("button").find((button) => button.textContent === text),
     field: (name) => gate.querySelectorAll("input, select").find((input) => input.name === name),
     async actor(value) { actor = value; await window.fire("auth:changed"); },
-    async choose(id) { this.select.value = id; await this.select.fire("change"); },
+    async choose(id) { this.select.value = id; await this.select.fire("change"); await new Promise((resolve) => setTimeout(resolve, 10)); },
   };
 }
 
@@ -178,6 +180,56 @@ test("signed-out Create Workspace uses existing auth and resumes only the explic
   const writes = f.calls.requests.filter(({url}) => url.endsWith("/create_workspace"));
   assert.equal(writes.length, 1);
   assert.equal(JSON.parse(writes[0].options.body).p_currency, "GBP");
+});
+
+test("native select change followed by click keeps Create Workspace authentication open", async () => {
+  const f = await fixture({ actor: null, rows: [privateRow, demoRow], authUI: true });
+  await f.ui.ready;
+  f.select.value = "__create";
+  // Native pointer selection can deliver click after input/change, unlike selectOption().
+  f.select.dispatchEvent({ type: "input", target: f.select, stopPropagation() {} });
+  f.select.dispatchEvent({ type: "change", target: f.select, stopPropagation() {} });
+  f.document.dispatchEvent({ type: "click", target: f.select });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(f.document.querySelector(".sf-auth-panel").hidden, false);
+  assert.equal(f.storage.get("steerfold-auth-intent"), "create-workspace");
+  assert.equal(f.select.value, demoId);
+  f.document.dispatchEvent({ type: "keydown", key: "Escape" });
+  assert.equal(f.document.querySelector(".sf-auth-panel").hidden, true);
+  f.ui.render("portfolio", 11);
+  await f.choose("__create");
+  assert.equal(f.document.querySelector(".sf-auth-panel").hidden, false);
+  assert.equal(f.select.value, demoId);
+});
+
+test("authenticated native action survives re-render and can reopen after leaving creation without auth", async () => {
+  const f = await fixture({ rows: [privateRow, demoRow], authUI: true });
+  await f.ui.ready;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    f.ui.render("portfolio", 11);
+    await f.choose("__create");
+    assert.equal(f.form.hidden, false);
+    assert.equal(f.gate.hidden, false);
+    assert.equal(f.select.value, privateId);
+    assert.equal(f.calls.launcher, 0);
+    assert.equal(f.document.querySelector(".sf-auth-panel").hidden, true);
+    await f.choose(demoId);
+    assert.equal(f.gate.hidden, true);
+    await f.choose(privateId);
+  }
+  assert.equal(f.calls.requests.some(({ url }) => url.endsWith("/create_workspace")), false);
+});
+
+test("a queued native action cannot open UI after the actor changes", async () => {
+  const f = await fixture({ actor: null, rows: [demoRow], authUI: true });
+  await f.ui.ready;
+  f.select.value = "__create";
+  f.select.dispatchEvent({ type: "change" });
+  await f.actor("actor-a");
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(f.document.querySelector(".sf-auth-panel").hidden, true);
+  assert.equal(f.form.hidden, false, "The new session resumes its existing intent once");
+  assert.equal(f.calls.launcher, 0);
 });
 
 for (const immediateSignup of [false, true]) {

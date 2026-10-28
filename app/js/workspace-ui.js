@@ -99,6 +99,7 @@ export function initWorkspaceUI({ onPrepare, onWorkspace, onPortfolio, onCreateP
   let creationUnverified = false;
   let discovering = false;
   let failureKind = "";
+  let createActionTimer = null;
   let createIntent = false;
   try { createIntent = localStorage.getItem(AUTH_INTENT_KEY) === "create-workspace"; } catch { /* Navigation works without persistence. */ }
 
@@ -211,18 +212,27 @@ export function initWorkspaceUI({ onPrepare, onWorkspace, onPortfolio, onCreateP
   }
   function openAuthentication(event) {
     // Keep the original click from closing the panel after the launcher opens it.
-    event.stopPropagation();
+    event?.stopPropagation();
     if (document.querySelector(".sf-auth-panel")?.hidden !== false) document.querySelector("[data-auth-launcher]")?.click();
   }
-  select.addEventListener("change", (event) => {
+  select.addEventListener("change", () => {
     if (select.value === "__create") {
       select.value = getActiveWorkspace()?.id || "";
-      if (isAuthenticated()) showCreateWorkspace();
-      else {
+      if (loading || creating || createActionTimer !== null) return;
+      if (!isAuthenticated()) {
         createIntent = true;
         try { localStorage.setItem(AUTH_INTENT_KEY, "create-workspace"); } catch { /* Retain intent for this page session. */ }
-        openAuthentication(event);
       }
+      const current = version;
+      const actor = getCurrentUser()?.id;
+      // Finish native selection (including its trailing click) before opening UI
+      // or rebuilding the select. Otherwise outside-click handling can close auth.
+      createActionTimer = setTimeout(() => {
+        createActionTimer = null;
+        if (current !== version || actor !== getCurrentUser()?.id || loading || creating) return;
+        if (isAuthenticated()) showCreateWorkspace();
+        else openAuthentication();
+      }, 0);
       return;
     }
     choose(select.value).catch((failure) => { error = failure.message; render(); });

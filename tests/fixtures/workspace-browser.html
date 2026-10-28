@@ -63,8 +63,10 @@
           <button type="button" class="sf-utility-secondary" id="fixture-reload">Reload Session</button>
           <button type="button" class="sf-utility-secondary" id="fixture-signout">Sign Out Fixture</button>
           <button type="button" class="sf-utility-secondary" id="fixture-reset">Reset Fixture</button>
+          <button type="button" class="sf-utility-secondary" id="fixture-dropdown-tests">Run Dropdown Regression Checks</button>
         </div>
         <p id="fixture-counts"></p>
+        <p id="fixture-dropdown-results" role="status"></p>
       </header>
       <main class="sf-main-content">
         <section data-portfolio-overview>
@@ -81,6 +83,7 @@
     import { initAuthUI } from '../../app/js/auth-ui.js';
     import { initWorkspaceUI } from '../../app/js/workspace-ui.js';
     import { getActiveWorkspace } from '../../app/js/workspace-context.js';
+    import { runDropdownRegressions } from './workspace-dropdown-regression.js';
     const byId = (id) => document.getElementById(id);
     let projectCount = 0;
     let workspaceUI;
@@ -129,6 +132,15 @@
     byId('fixture-reload').onclick = async () => { await workspaceUI.reload(); workspaceUI.render('portfolio', projectCount); status(); };
     byId('fixture-signout').onclick = async () => { await signOut(); window.dispatchEvent(new CustomEvent('auth:changed')); };
     byId('fixture-reset').onclick = () => { byId('fixture-failure').checked = false; byId('fixture-hold').checked = false; resetFixture(); };
+    byId('fixture-dropdown-tests').onclick = async (event) => {
+      const button = event.currentTarget;
+      button.disabled = true;
+      try {
+        byId('fixture-dropdown-results').textContent = await runDropdownRegressions({ ui: workspaceUI, state, resetFixture, getActiveWorkspace });
+      } catch (error) {
+        byId('fixture-dropdown-results').textContent = `FAIL: ${error.message}`;
+      } finally { button.disabled = false; }
+    };
     byId('fixture-menu').onclick = () => sidebar(!document.body.classList.contains('sf-sidebar-open'));
     document.querySelector('.sf-sidebar-close').onclick = () => sidebar(false);
     document.querySelector('[data-sidebar-overlay]').onclick = () => sidebar(false);
