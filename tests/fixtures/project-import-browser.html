@@ -32,8 +32,10 @@
     <p id="mock-counters" role="status">Mock commits: 0; recoveries: 0; refreshes: 0</p>
   </main>
   <script type="module">
+    import { acceptOrganizationSettings } from "../../app/js/organization-currency.js";
     import { openProjectImport } from "../../app/js/project-import.js";
     import { refresh, renderCounters } from "./project-import-mock-service.js";
+    acceptOrganizationSettings({ id: true, organization_currency: "CAD", updated_at: new Date().toISOString() });
     document.getElementById("mock-theme").addEventListener("change", (event) => { document.documentElement.dataset.sfTheme = event.target.value; });
     document.getElementById("open-import").addEventListener("click", () => {
       openProjectImport({ onImported: refresh, onViewProjects: renderCounters });

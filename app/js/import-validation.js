@@ -19,10 +19,6 @@ export const IMPORT_FIELDS = [
 ].map((field) => Object.freeze({ required: true, ...field }));
 
 const normalizedHeader = (value) => String(value ?? "").toLowerCase().replace(/[^a-z0-9]/g, "");
-const currencyCode = APP_CONFIG.portfolio.currencyCode;
-const currencySymbol = new Intl.NumberFormat(APP_CONFIG.portfolio.locale, { style: "currency", currency: currencyCode })
-  .formatToParts(0).find((part) => part.type === "currency").value;
-const currencyPrefixes = [...new Set([currencyCode, currencySymbol, ...(currencySymbol.includes("$") ? ["$"] : [])])];
 
 export function suggestImportMappings(headers) {
   const used = new Set();
@@ -58,6 +54,10 @@ function normalizeDate(value) {
 }
 
 function numericValue(value, monetary = false) {
+  const currencyCode = APP_CONFIG.portfolio.currencyCode;
+  const currencySymbol = new Intl.NumberFormat(APP_CONFIG.portfolio.locale, { style: "currency", currency: currencyCode })
+    .formatToParts(0).find((part) => part.type === "currency").value;
+  const currencyPrefixes = [...new Set([currencyCode, currencySymbol, ...(currencySymbol.includes("$") ? ["$"] : [])])];
   let text = String(value).trim();
   if (monetary) {
     for (const prefix of currencyPrefixes) {

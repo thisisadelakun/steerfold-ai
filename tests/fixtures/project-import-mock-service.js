@@ -37,7 +37,7 @@ export async function commitProjectImport(snapshot) {
     contract_version: 1, status: "committed", replayed: false, import_id: crypto.randomUUID(),
     idempotency_key: snapshot.idempotencyKey, payload_hash: hash, imported_by: actor,
     committed_at: new Date().toISOString(), source_namespace: snapshot.payload.source_namespace?.trim().toLowerCase() || null,
-    currency_code: "CAD", rows_submitted: snapshot.payload.rows.length, rows_imported: snapshot.payload.rows.length,
+    currency_code: snapshot.payload.currency_code, rows_submitted: snapshot.payload.rows.length, rows_imported: snapshot.payload.rows.length,
     rows_skipped: 0, rows_failed: 0,
     rows: snapshot.payload.rows.map((row, index) => ({ source_row: row.source_row, source_project_id: row.source_project_id,
       project_uuid: crypto.randomUUID(), project_id: `MOCK-NEW-${index + 1}`, project_name: row.project.project_name })),

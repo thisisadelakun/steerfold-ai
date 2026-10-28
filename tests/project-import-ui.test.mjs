@@ -50,6 +50,8 @@ async function fixture({ commit, recover, onImported = async () => {} } = {}) {
   const events = new Map();
   const window = { addEventListener: (name, handler) => events.set(name, handler), removeEventListener: (name) => events.delete(name) };
   let authenticated = true;
+  const originalWorkspace = { id: "fixture-workspace", name: "Fixture", industry: "IT", currency: "CAD", isDemo: false, canWrite: true };
+  let activeWorkspace = originalWorkspace;
   const requests = [];
   const commits = [];
   const recoveries = [];
@@ -63,9 +65,14 @@ async function fixture({ commit, recover, onImported = async () => {} } = {}) {
   };
   const dependencies = {
     "./app-config.js": { APP_CONFIG: { portfolio: { currencyCode: "CAD" } } },
+    "./organization-currency.js": { getOrganizationCurrencyState: () => ({ status: "ready", currency: "CAD" }), subscribeOrganizationCurrency: () => () => {} },
     "./import-parser.js": { parseImportFile: async (file) => ({ name: file.name, type: "XLSX", sheetNames: ["Valid Projects", "Other"], readSheet: () => staged }) },
     "./import-validation.js": validation,
     "./auth-service.js": { isAuthenticated: () => authenticated, getCurrentUser: () => authenticated ? { id: actorId } : null },
+    "./workspace-context.js": {
+      getActiveWorkspace: () => activeWorkspace,
+      canWriteWorkspace: () => !!activeWorkspace && !activeWorkspace.isDemo && activeWorkspace.canWrite === true,
+    },
     "./project-import-service.js": { checkProjectImport: (payload) => {
       requests.push(payload);
       return new Promise((resolve) => { resolveCheck = resolve; });
@@ -97,6 +104,13 @@ async function fixture({ commit, recover, onImported = async () => {} } = {}) {
   await click("Continue to Validate");
   await click("Continue to Preview");
   return { document, byText, click, requests, commits, recoveries,
+    originalWorkspace,
+    async selectWorkspace(workspace) {
+      activeWorkspace = workspace;
+      const changed = events.get("workspace:changed") || events.get("auth:changed");
+      changed?.();
+      await flush();
+    },
     reopen() { module.namespace.openProjectImport({ onImported }); },
     async confirm() { const field = document.getElementById("sf-import-confirm-create"); assert.ok(field); field.checked = true; await field.fire("change"); },
     async namespace(value) { const field = document.getElementById("sf-import-namespace"); field.value = value; await field.fire("input"); },
@@ -162,7 +176,7 @@ function committed(snapshot, replayed = false) {
     contract_version: 1, status: "committed", replayed,
     import_id: "33333333-3333-4333-8333-333333333333", idempotency_key: snapshot.idempotencyKey,
     payload_hash: snapshot.payloadHash, imported_by: actorId, committed_at: "2026-10-22T15:00:00+00:00",
-    source_namespace: snapshot.payload.source_namespace?.trim().toLowerCase() || null, currency_code: "CAD",
+    source_namespace: snapshot.payload.source_namespace?.trim().toLowerCase() || null, currency_code: snapshot.payload.currency_code,
     rows_submitted: snapshot.payload.rows.length, rows_imported: snapshot.payload.rows.length, rows_skipped: 0, rows_failed: 0,
     rows: snapshot.payload.rows.map((row, index) => ({ source_row: row.source_row, source_project_id: row.source_project_id,
       project_uuid: `44444444-4444-4444-8444-${String(index + 1).padStart(12, "0")}`,
@@ -284,6 +298,44 @@ test("uncertain recovery survives closing for sign-in and cannot be retried whil
   assert.equal(ui.document.getElementById("sf-project-import").open, true);
   found = true;
   await ui.click("Check Import Result");
+  assert.equal(ui.commits.length, 1);
+  assert.match(ui.document.body.textContent, /Import Complete/);
+});
+
+test("closed uncertain attempt blocks recovery and retry in another workspace until the original is selected", async () => {
+  let found = false;
+  let ui;
+  ui = await fixture({ commit: async () => { throw Object.assign(new Error("connection interrupted"), { uncertain: true }); },
+    recover: async (key) => found ? committed(ui.commits[0], true) : { contract_version: 1, status: "not_found", idempotency_key: key } });
+  await ready(ui);
+  await ui.click("Import Projects");
+  const snapshot = ui.commits[0];
+  const retry = ui.byText("Retry Import");
+  const recover = ui.byText("Check Import Result");
+  assert.equal(retry.disabled, false);
+  assert.equal(recover.disabled, false);
+  await ui.click("Close (keep recovery)");
+  assert.equal(ui.document.getElementById("sf-project-import").open, false);
+
+  await ui.selectWorkspace({ ...ui.originalWorkspace, id: "another-workspace" });
+  ui.reopen();
+  assert.equal(ui.document.getElementById("sf-project-import").open, true);
+  for (const label of ["Retry Import", "Check Import Result"]) {
+    assert.ok(!ui.byText(label) || ui.byText(label).disabled, `${label} must be unavailable in another workspace`);
+  }
+  // Invoke retained handlers directly so the test also verifies action guards.
+  await retry.fire("click");
+  await recover.fire("click");
+  assert.equal(ui.commits.length, 1);
+  assert.deepEqual(ui.recoveries, [snapshot.idempotencyKey]);
+  assert.doesNotMatch(ui.document.body.textContent, /Import Complete/);
+
+  await ui.selectWorkspace(ui.originalWorkspace);
+  assert.equal(ui.byText("Retry Import").disabled, false);
+  assert.equal(ui.byText("Check Import Result").disabled, false);
+  found = true;
+  await ui.click("Check Import Result");
+  assert.deepEqual(ui.recoveries, [snapshot.idempotencyKey, snapshot.idempotencyKey]);
   assert.equal(ui.commits.length, 1);
   assert.match(ui.document.body.textContent, /Import Complete/);
 });

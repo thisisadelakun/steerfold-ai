@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en" data-sf-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; connect-src 'none'; img-src 'self' data:; font-src 'self'; form-action 'none'; base-uri 'self'">
+  <title>Offline Workspace and Signup QA</title>
+  <link rel="stylesheet" href="../../app/styles.css">
+  <script>
+    window.fetch = async () => { throw new TypeError("Offline fixture is initializing; network is disabled."); };
+  </script>
+  <script type="importmap">{"imports": {
+    "/app/js/auth-service.js": "/tests/fixtures/workspace-browser-mock.js",
+    "/app/js/supabase-config.js": "/tests/fixtures/workspace-browser-mock.js"
+  }}</script>
+  <style>
+    .fixture-controls { padding: 16px 24px; border-bottom: 1px solid var(--sf-border); }
+    .fixture-controls h1 { margin: 0 0 8px; font-size: 1.15rem; }
+    .fixture-controls p { margin: 8px 0; color: var(--sf-text-secondary); overflow-wrap: anywhere; }
+    .fixture-controls label { display: inline-flex; gap: 8px; align-items: center; margin-right: 16px; }
+    .fixture-controls .sf-workspace-actions { margin-top: 12px; }
+    .fixture-content { min-width: 0; }
+    .fixture-table { width: 100%; border-collapse: collapse; }
+    .fixture-table th, .fixture-table td { padding: 12px; text-align: left; border-bottom: 1px solid var(--sf-border); overflow-wrap: anywhere; }
+    .fixture-table th { color: var(--sf-text-secondary); }
+    .fixture-mobile-toggle { display: none; }
+    @media (max-width: 820px) {
+      .fixture-mobile-toggle { display: inline-flex; }
+      .fixture-controls { padding: 16px; }
+      .fixture-table th, .fixture-table td { padding: 8px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="sf-sidebar-overlay" data-sidebar-overlay hidden></div>
+  <div class="sf-app-shell">
+    <aside class="sf-sidebar" id="sf-sidebar" aria-label="Primary navigation">
+      <div class="sf-sidebar-header">
+        <span class="sf-wordmark-text">Steerfold</span>
+        <button class="sf-sidebar-toggle" type="button" aria-label="Collapse sidebar" aria-expanded="true"><svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 7-5 5 5 5"></path></svg></button>
+        <button class="sf-sidebar-close" type="button" aria-label="Close navigation menu">Close</button>
+      </div>
+      <nav class="sf-nav" aria-label="Portfolio sections">
+        <a class="sf-nav-link sf-nav-link--active" href="#portfolio"><svg class="sf-button-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 3h7v7H3z M14 3h7v7h-7z M3 14h7v7H3z M14 14h7v7h-7z"></path></svg><span class="sf-nav-label">Portfolio</span></a>
+      </nav>
+      <div class="sf-sidebar-footer">
+        <button class="sf-sidebar-account-button" type="button" data-auth-launcher>
+          <span class="sf-button-icon" aria-hidden="true">S</span><span class="sf-sidebar-account-label">Sign In</span>
+        </button>
+      </div>
+    </aside>
+    <div class="sf-main-area fixture-content">
+      <header class="fixture-controls">
+        <h1>Offline Workspace and Signup QA</h1>
+        <p>Synthetic identities and in-memory workspaces. No email is sent and no real account is created.</p>
+        <button type="button" class="sf-utility-secondary fixture-mobile-toggle" aria-controls="sf-sidebar" aria-expanded="false" id="fixture-menu">Navigation</button>
+        <p id="fixture-state" role="status"></p>
+        <label><input type="checkbox" id="fixture-failure"> Fail workspace API</label>
+        <label><input type="checkbox" id="fixture-hold"> Hold workspace API</label>
+        <label><input type="checkbox" id="fixture-light"> Light theme</label>
+        <div class="sf-workspace-actions">
+          <button type="button" class="sf-utility-secondary" id="fixture-release">Release Requests</button>
+          <button type="button" class="sf-utility-secondary" id="fixture-reload">Reload Session</button>
+          <button type="button" class="sf-utility-secondary" id="fixture-signout">Sign Out Fixture</button>
+          <button type="button" class="sf-utility-secondary" id="fixture-reset">Reset Fixture</button>
+        </div>
+        <p id="fixture-counts"></p>
+      </header>
+      <main class="sf-main-content">
+        <section data-portfolio-overview>
+          <h2 id="fixture-portfolio-title">Portfolio</h2>
+          <p id="fixture-portfolio-summary"></p>
+          <table class="fixture-table"><thead><tr><th>Project</th><th>Status</th><th>Budget</th></tr></thead><tbody id="fixture-projects"></tbody></table>
+        </section>
+      </main>
+      <p id="fixture-action" role="status" style="padding:0 24px"></p>
+    </div>
+  </div>
+  <script type="module">
+    import { state, signOut, resetFixture, releaseRequests } from './workspace-browser-mock.js';
+    import { initAuthUI } from '../../app/js/auth-ui.js';
+    import { initWorkspaceUI } from '../../app/js/workspace-ui.js';
+    import { getActiveWorkspace } from '../../app/js/workspace-context.js';
+    const byId = (id) => document.getElementById(id);
+    let projectCount = 0;
+    let workspaceUI;
+    function status() {
+      const workspace = getActiveWorkspace();
+      byId('fixture-state').textContent = `${state.user ? 'Signed in: ' + state.user.email : 'Signed out'} | ${state.pendingEmail ? 'Verification pending: ' + state.pendingEmail + ' | ' : ''}Workspace: ${workspace?.name || 'none'}${workspace ? ' | ' + workspace.currency : ''}`;
+      byId('fixture-counts').textContent = `Local calls: signup ${state.calls.signup}; sign-in ${state.calls.signin}; list ${state.calls.list}; create ${state.calls.create}; blocked fetch ${state.calls.blocked}.`;
+    }
+    function sidebar(open) {
+      document.body.classList.toggle('sf-sidebar-open', open);
+      document.querySelector('[data-sidebar-overlay]').hidden = !open;
+      byId('fixture-menu').setAttribute('aria-expanded', String(open));
+    }
+    initAuthUI();
+    workspaceUI = initWorkspaceUI({
+      onPrepare() { projectCount = 0; byId('fixture-projects').replaceChildren(); byId('fixture-action').textContent = ''; status(); },
+      async onWorkspace(workspace) {
+        projectCount = workspace.isDemo ? 2 : 0;
+        byId('fixture-portfolio-title').textContent = workspace.name;
+        byId('fixture-portfolio-summary').textContent = workspace.isDemo ? '2 synthetic demo projects' : '0 projects';
+        byId('fixture-projects').replaceChildren();
+        if (workspace.isDemo) for (const values of [['Demo Delivery', 'On Track', 'CAD 120,000'], ['Demo Upgrade', 'At Risk', 'CAD 85,000']]) {
+          const tr = document.createElement('tr');
+          for (const value of values) { const td = document.createElement('td'); td.textContent = value; tr.append(td); }
+          byId('fixture-projects').append(tr);
+        }
+        workspaceUI?.render('portfolio', projectCount); status();
+      },
+      onPortfolio() { workspaceUI.render('portfolio', projectCount); sidebar(false); status(); },
+      onCreateProject() { byId('fixture-action').textContent = 'Create Project selected. This workspace still has 0 projects; the fixture does not write project data.'; },
+      onImport() { byId('fixture-action').textContent = 'Import Projects selected. This workspace still has 0 projects; the fixture does not import data.'; },
+    });
+    window.workspaceFixture = { state, ui: workspaceUI, getActiveWorkspace };
+    document.querySelector('.sf-sidebar-toggle').onclick = (event) => {
+      const collapsed = document.querySelector('.sf-app-shell').classList.toggle('sf-sidebar-collapsed');
+      event.currentTarget.setAttribute('aria-expanded',String(!collapsed));
+      event.currentTarget.setAttribute('aria-label',collapsed ? 'Expand sidebar' : 'Collapse sidebar');
+      workspaceUI.syncSidebar();
+    };
+    window.addEventListener('fixture:changed', status);
+    window.addEventListener('auth:changed', status);
+    byId('fixture-failure').onchange = (event) => { state.fail = event.target.checked; };
+    byId('fixture-hold').onchange = (event) => { state.hold = event.target.checked; if (!state.hold) releaseRequests(); };
+    byId('fixture-light').onchange = (event) => { document.documentElement.dataset.sfTheme = event.target.checked ? 'light' : 'dark'; };
+    byId('fixture-release').onclick = releaseRequests;
+    byId('fixture-reload').onclick = async () => { await workspaceUI.reload(); workspaceUI.render('portfolio', projectCount); status(); };
+    byId('fixture-signout').onclick = async () => { await signOut(); window.dispatchEvent(new CustomEvent('auth:changed')); };
+    byId('fixture-reset').onclick = () => { byId('fixture-failure').checked = false; byId('fixture-hold').checked = false; resetFixture(); };
+    byId('fixture-menu').onclick = () => sidebar(!document.body.classList.contains('sf-sidebar-open'));
+    document.querySelector('.sf-sidebar-close').onclick = () => sidebar(false);
+    document.querySelector('[data-sidebar-overlay]').onclick = () => sidebar(false);
+    document.querySelector('.sf-nav-link').onclick = () => sidebar(false);
+    document.addEventListener('keydown', (event) => { if (event.key === 'Escape') sidebar(false); });
+    await workspaceUI.ready;
+    workspaceUI.render('portfolio', projectCount); status();
+    document.documentElement.dataset.fixtureReady = 'true';
+  </script>
+</body>
+</html>

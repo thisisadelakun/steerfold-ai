@@ -371,7 +371,10 @@ export function renderGovernanceView(container, projects) {
   container.querySelector("[data-gov-reset]").addEventListener("click", reset);
   reset();
 
-  registerCurrencyRenderer(projectSelect, () => update(container, selected));
+  registerCurrencyRenderer(projectSelect, () => {
+    container.querySelector('label[for="sf-governance-amount"]').textContent = `Budget Change Amount (${APP_CONFIG.portfolio.currencyCode})`;
+    update(container, selected);
+  });
   return {
     saveArea: container.querySelector("[data-gov-save-area]"),
     getAssessment() {

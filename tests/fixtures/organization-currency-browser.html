@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en" data-sf-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Offline Organization Currency QA</title>
+  <link rel="stylesheet" href="../../app/styles.css">
+  <script type="importmap">
+  {"imports": {
+    "/app/js/organization-settings-service.js": "/tests/fixtures/organization-currency-mock.js",
+    "/app/js/fx-service.js": "/tests/fixtures/organization-currency-mock.js",
+    "/app/js/auth-service.js": "data:text/javascript,export function isAuthenticated(){return true} export function getCurrentUser(){return {id:'fixture-admin'}}",
+    "/app/js/governance-role-service.js": "data:text/javascript,export async function getMyGovernanceRoles(){return [{role:'governance_admin'}]}"
+  }}
+  </script>
+</head>
+<body>
+  <main style="padding:24px;max-width:760px;margin:auto;color:var(--sf-text-primary)">
+    <h1>Offline Organization Currency QA</h1>
+    <p>Synthetic FX rates for UI checks only. No live database access.</p>
+    <label><input type="checkbox" id="fixture-fail-fx"> Simulate FX unavailable</label>
+    <p id="fixture-counts" role="status"></p>
+    <fieldset class="sf-currency-preferences">
+      <legend>Currency</legend>
+      <label for="fixture-org">Organization Currency</label>
+      <select id="fixture-org" data-organization-currency-select>
+        <option value="USD">USD - US Dollar</option><option value="CAD">CAD - Canadian Dollar</option>
+        <option value="GBP">GBP - British Pound</option><option value="EUR">EUR - Euro</option>
+      </select>
+      <p>Project budgets, EVM calculations, forecasts and governance records use your organization's currency.</p>
+      <button type="button" class="sf-utility-primary" data-organization-currency-save>Save Organization Currency</button>
+      <button type="button" class="sf-utility-secondary" data-organization-currency-reload>Reload Settings</button>
+      <p data-organization-currency-status role="status"></p>
+      <label for="fixture-display">Display Currency</label>
+      <select id="fixture-display"><option>USD</option><option>CAD</option><option>GBP</option><option>EUR</option></select>
+      <p>Display currency changes how financial values are shown. It does not change stored project budgets or governance records.</p>
+      <div id="fixture-status" class="sf-fx-status" role="status"></div>
+      <div class="sf-currency-preview"><p class="sf-currency-preview-label">Display example</p><strong id="fixture-example"></strong></div>
+    </fieldset>
+  </main>
+  <script type="module">
+    import { initOrganizationCurrencySettings } from "../../app/js/organization-settings-ui.js";
+    import { getCurrencyState, setDisplayCurrency, subscribeCurrencyChanges, refreshCurrencyRate } from "../../app/js/currency-preferences.js";
+    import { formatDisplayCurrency } from "../../app/js/formatters.js";
+    import { showCounts } from "./organization-currency-mock.js";
+    function render() {
+      const state = getCurrencyState();
+      document.querySelector('#fixture-display').value = state.displayCurrency;
+      document.querySelector('#fixture-status').textContent = state.conversionRequired
+        ? state.fxStatus === 'ready' ? `Converted from ${state.organizationCurrency} to ${state.displayCurrency}. Synthetic offline rate.`
+          : `Conversion unavailable. Values remain in ${state.organizationCurrency}.`
+        : `Values are displayed in ${state.organizationCurrency}. No exchange rate is required.`;
+      document.querySelector('#fixture-example').textContent = `${state.organizationCurrency} 100 -> ${formatDisplayCurrency(100)}`;
+      showCounts();
+    }
+    subscribeCurrencyChanges(render);
+    document.querySelector('#fixture-display').addEventListener('change', (event) => setDisplayCurrency(event.target.value));
+    document.querySelector('#fixture-fail-fx').addEventListener('change', refreshCurrencyRate);
+    await initOrganizationCurrencySettings().ready;
+    render();
+  </script>
+</body>
+</html>

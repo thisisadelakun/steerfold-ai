@@ -1,15 +1,15 @@
+import { getOrganizationCurrency } from "./organization-currency.js";
+import { ORGANIZATION_CONFIG } from "./organization-config.js";
+
 export const APP_CONFIG = Object.freeze({
   product: Object.freeze({
     name: "Steerfold AI",
   }),
 
-  organization: Object.freeze({
-    name: "Brisk & Zip",
-    shortName: "Brisk & Zip",
-  }),
+  organization: ORGANIZATION_CONFIG,
 
   portfolio: Object.freeze({
-    currencyCode: "CAD",
+    get currencyCode() { return getOrganizationCurrency(); },
     locale: "en-CA",
     sampleDataNotice:
       "Simulated portfolio data for planning and demonstration.",

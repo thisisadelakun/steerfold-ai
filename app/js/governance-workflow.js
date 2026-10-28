@@ -4,6 +4,7 @@ import { registerCurrencyRenderer } from "./currency-presentation.js";
 import { APP_CONFIG } from "./app-config.js";
 import { isAuthenticated, getCurrentUser } from "./auth-service.js";
 import { getMyGovernanceRoles } from "./governance-role-service.js";
+import { canWriteWorkspace } from "./workspace-context.js";
 import { initGovernanceReporting } from "./governance-reporting.js";
 import { initGovernanceRoleManagement } from "./governance-role-management.js";
 import {
@@ -325,7 +326,7 @@ export function initGovernanceWorkflow({
   };
 
   function hasRole(role) {
-    return state.authenticated && state.rolesStatus === "ready" && state.roles.has(role);
+    return canWriteWorkspace() && state.authenticated && state.rolesStatus === "ready" && state.roles.has(role);
   }
 
   function ownsRequest(request) {
@@ -476,6 +477,7 @@ export function initGovernanceWorkflow({
         .filter(([role]) => state.roles.has(role))
         .map(([, name]) => name).join(" \u00b7 ") || "No governance workflow roles assigned.";
     }
+    if (!canWriteWorkspace()) copy.textContent += " This workspace is read-only.";
     summary.append(label, copy);
     if (state.rolesStatus === "error") {
       const retry = document.createElement("button");

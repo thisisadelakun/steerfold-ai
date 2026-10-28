@@ -6,6 +6,8 @@ export function getCurrentRoute() {
   const url = new URL(window.location.href);
   const projectId = url.searchParams.get("project");
 
+  if (url.hash === "#workspace") return { view: "workspace", projectId: null };
+
   if (projectId) {
     return {
       view: "project",
@@ -49,6 +51,10 @@ export function getCurrentRoute() {
     return { view: "settings", projectId: null };
   }
 
+  if (url.hash === "#account") {
+    return { view: "account", projectId: null };
+  }
+
   if (url.hash === "#stakeholder-view") {
     return {
       view: "stakeholder-view",
@@ -60,6 +66,26 @@ export function getCurrentRoute() {
     view: "portfolio",
     projectId: null,
   };
+}
+
+// Keep the requested destination in this history entry, never in tenant context.
+export function suspendWorkspaceRoute() {
+  const url = new URL(window.location.href);
+  if (url.hash === "#account" || url.hash === "#workspace") return;
+  const workspaceReturnUrl = buildRelativeUrl(url);
+  url.searchParams.delete("project");
+  url.hash = "workspace";
+  history.replaceState({ ...history.state, view: "workspace", workspaceReturnUrl }, "", buildRelativeUrl(url));
+}
+
+export function restoreWorkspaceRoute() {
+  const url = new URL(window.location.href);
+  if (url.hash !== "#workspace") return false;
+  const requested = history.state?.workspaceReturnUrl;
+  const destination = new URL(requested || url.pathname, url);
+  if (destination.origin !== url.origin || destination.pathname !== url.pathname) return false;
+  history.replaceState(null, "", buildRelativeUrl(destination));
+  return true;
 }
 
 export function pushProjectRoute(projectId) {
@@ -173,6 +199,13 @@ export function pushSettingsRoute() {
   url.searchParams.delete("project");
   url.hash = "settings";
   history.pushState({ view: "settings" }, "", buildRelativeUrl(url));
+}
+
+export function pushAccountRoute() {
+  const url = new URL(window.location.href);
+  url.searchParams.delete("project");
+  url.hash = "account";
+  history.pushState({ view: "account" }, "", buildRelativeUrl(url));
 }
 
 export function pushStakeholderViewRoute() {

@@ -91,20 +91,40 @@ test("committed/replayed results are validated against exact key, hash, actor an
 });
 
 const source = await readFile(new URL("../app/js/project-import-service.js", import.meta.url), "utf8");
-async function fixture({ status = 200, body = result, networkError = false, nonJson = false, token = "fixture-token" } = {}) {
+async function fixture({ status = 200, body = result, networkError = false, nonJson = false, token = "fixture-token",
+  workspace = { id: "workspace-id", canWrite: true, isDemo: false }, onToken, onFetch, onJson } = {}) {
+  let currentWorkspace = workspace;
+  const switchWorkspace = () => { currentWorkspace = { id: "other-id", canWrite: true, isDemo: false }; };
+  const workspaceContext = {
+    getActiveWorkspace: () => currentWorkspace,
+    workspaceHeaders: () => {
+      if (!currentWorkspace) throw new Error("Select an active workspace first.");
+      return { "x-steerfold-organization-id": currentWorkspace.id };
+    },
+    requireWritableWorkspace: () => {
+      if (!currentWorkspace || currentWorkspace.isDemo || !currentWorkspace.canWrite) throw new Error("Workspace is not writable.");
+      return currentWorkspace;
+    },
+    assertWorkspaceCurrent: (captured) => {
+      if (!captured || captured !== currentWorkspace) throw new Error("Active workspace changed.");
+    },
+  };
   const requests = [];
   const context = vm.createContext({ AbortController, setTimeout, clearTimeout, TypeError,
     fetch: async (url, options) => {
       requests.push({ url, options });
+      onFetch?.(switchWorkspace);
       if (networkError) throw new TypeError("connection lost");
-      return { ok: status >= 200 && status < 300, status, json: async () => { if (nonJson) throw new Error("invalid JSON"); return body; } };
+      return { ok: status >= 200 && status < 300, status, json: async () => { onJson?.(switchWorkspace); if (nonJson) throw new Error("invalid JSON"); return body; } };
     },
   });
   const module = new vm.SourceTextModule(source, { context });
   await module.link((name) => {
     const dependency = name === "./supabase-config.js"
       ? { SUPABASE_URL: "https://fixture.invalid", SUPABASE_PUBLISHABLE_KEY: "publishable-fixture" }
-      : name === "./auth-service.js" ? { getValidAccessToken: async () => token }
+      : name === "./workspace-context.js" ? workspaceContext
+      : name === "./auth-service.js" ? { getValidAccessToken: async () => { onToken?.(switchWorkspace); return token; } }
+        : name === "./organization-currency.js" ? { requireOrganizationCurrency: () => "CAD" }
         : name === "./import-commit-state.js" ? { normalizeProjectImportResult } : { normalizeImportAnalysis };
     return new vm.SyntheticModule(Object.keys(dependency), function () {
       for (const [key, value] of Object.entries(dependency)) this.setExport(key, value);
@@ -123,6 +143,7 @@ test("commit transport sends exact PostgREST arguments with authenticated token 
   assert.equal(options.method, "POST");
   assert.equal(options.headers.Authorization, "Bearer fixture-token");
   assert.equal(options.headers.apikey, "publishable-fixture");
+  assert.equal(options.headers["x-steerfold-organization-id"], "workspace-id");
   assert.equal(options.headers["Content-Type"], "application/json");
   assert.deepEqual(JSON.parse(options.body), { p_idempotency_key: key, p_payload: payload, p_acknowledgements: [acknowledgement] });
   for (const field of ["id", "project_id", "created_at", "updated_at", "actor_id", "imported_by"]) {
@@ -135,6 +156,7 @@ test("result lookup is read-only transport with same key and supports not_found 
     const f = await fixture({ body });
     assert.equal((await f.api.getProjectImportResult(key)).status, body.status);
     assert.equal(f.requests[0].url, "https://fixture.invalid/rest/v1/rpc/get_project_import_result");
+    assert.equal(f.requests[0].options.headers["x-steerfold-organization-id"], "workspace-id");
     assert.deepEqual(JSON.parse(f.requests[0].options.body), { p_idempotency_key: key });
     assert.equal(f.requests.length, 1);
   }
@@ -170,4 +192,39 @@ test("app integration uses strict Supabase refresh, verifies imported IDs and re
   assert.match(integration, /await this\.loadDashboard\(\{ allowCsvFallback: false \}\)/);
   assert.match(integration, /result\.rows\.some\(\(row\) => !projectIds\.has\(row\.project_id\)\)/);
   assert.match(integration, /onViewProjects: \(\) => this\.navigateToProjects\(\)/);
+});
+
+test("commit blocks demo, read-only and unresolved workspaces before authentication", async () => {
+  for (const workspace of [null, { id: "demo", isDemo: true, canWrite: false }, { id: "read", isDemo: false, canWrite: false }]) {
+    const f = await fixture({ workspace });
+    await assert.rejects(f.api.commitProjectImport({ idempotencyKey: key, payload, acknowledgements: [] }), /not writable/);
+    assert.equal(f.requests.length, 0);
+  }
+});
+
+test("read-only import recovery remains scoped and allowed in demo and read-only workspaces", async () => {
+  for (const workspace of [{ id: "demo", isDemo: true, canWrite: false }, { id: "read", isDemo: false, canWrite: false }]) {
+    const f = await fixture({ workspace });
+    assert.equal((await f.api.getProjectImportResult(key)).status, "committed");
+    assert.equal(f.requests[0].options.headers["x-steerfold-organization-id"], workspace.id);
+  }
+  const f = await fixture({ workspace: null });
+  await assert.rejects(f.api.getProjectImportResult(key), /active workspace/);
+  assert.equal(f.requests.length, 0);
+});
+
+test("workspace changes prevent sends after token refresh and mark sent commits uncertain", async () => {
+  for (const hook of ["onToken", "onFetch", "onJson"]) {
+    for (const write of [true, false]) {
+      const f = await fixture({ [hook]: (switchWorkspace) => switchWorkspace() });
+      const pending = write ? f.api.commitProjectImport({ idempotencyKey: key, payload, acknowledgements: [] })
+        : f.api.getProjectImportResult(key);
+      await assert.rejects(pending, (error) => {
+        assert.match(error.message, /workspace changed/);
+        if (hook !== "onToken") assert.equal(error.uncertain, write);
+        return true;
+      });
+      assert.equal(f.requests.length, hook === "onToken" ? 0 : 1);
+    }
+  }
 });

@@ -7,6 +7,7 @@ export function formatCurrency(
   locale = APP_CONFIG.portfolio.locale,
   currencyDisplay = "symbol",
 ) {
+  if (!currency) return "\u2014";
   return new Intl.NumberFormat(locale, {
     style: "currency",
     currency,

@@ -91,7 +91,7 @@ VS Code Live Server or another static file server can be used. Avoid opening `in
 ### Local FX Function
 
 Display conversion uses the same-origin Netlify Function at
-`/.netlify/functions/fx-rate?base=CAD&quote=USD`. A plain static server cannot
+`/.netlify/functions/fx-rate?base=USD&quote=GBP`. A plain static server cannot
 execute this function; foreign conversion then safely retains organization-currency values.
 
 From the repository root, use Netlify Dev to serve the application and function:
@@ -107,6 +107,50 @@ bypass or Supabase FX tables are used. Monetary readouts and print output use th
 selected display currency when a validated rate is ready. Operational financial
 inputs, stored records, and calculations remain in the organization currency.
 Missing or unverified rates safely retain organization-currency notation.
+
+## Organization and Display Currency
+
+Organization Currency defines the currency context of budgets, EVM amounts,
+forecasts, governance and uploaded amounts. Steerfold has no universal currency;
+Brisk & Zip chooses CAD. Deployments can select CAD, USD, GBP or EUR. Supabase's singleton
+`organization_settings` row is authoritative; it is not a browser preference.
+Only authenticated Governance Admins can change organization currency. A real
+change requires explicit acknowledgement that existing numeric financial amounts
+will be interpreted in the selected currency without conversion. The RPC checks
+the expected current currency to reject stale saves; it never rescales project
+or governance values. This is a deliberate semantic setting, not historical FX.
+New organization deployments must explicitly choose a currency during setup;
+the database column has no product-wide default. CAD is Brisk & Zip's selection.
+
+Display Currency is a separate browser preference. Matching organization/display
+currencies require no FX request. Otherwise, validated reference rates convert
+presentation only; unavailable FX falls back to the organization currency, never
+to a product-wide CAD default. Ratios, rankings and stored financial values do not change.
+
+Safe Import submits organization-currency amounts without conversion. The server
+checks the active currency again at commit time, serialized against settings
+changes. Historical import results retain their recorded currency (including CAD)
+and idempotent replay remains valid after a currency-context change.
+
+Account (`#account`) is separate from Settings. Signed-in users can manage their
+own name/job title and avatar, use Supabase password verification/change, and sign
+out. Email remains authentication-managed. Settings holds company information,
+financial settings, appearance and display preferences; company edits require a
+Governance Admin. Personal profiles are private, with no role assignment implied.
+
+The local profile migration is `20261027_company_user_profiles.sql`, following
+the organization-currency migration. Neither has been applied by this change.
+See `supabase/validation/account_settings_rollout.md` for the read-only preflight,
+approval boundary, staging acceptance checks and recovery plan. Persistent saves
+must not be claimed as live-tested until that database rollout is confirmed.
+
+The Phase 18 migration `supabase/migrations/20261026_organization_currency.sql`
+is local pending review and a rollback dry-run. Do not deploy this refactor before
+the separately approved database rollout. Until the authority is available,
+Settings reports unavailable authority and new import reviews fail closed; public
+demo readouts can still use Brisk & Zip's configured CAD fallback. Conversion
+feedback stays in Settings, with no permanent global currency badge or banner. No live data migration
+or historical FX conversion is implied.
 
 ## Deployment
 
@@ -153,7 +197,7 @@ app/
 - Single organization per deployment
 - No multi-tenancy yet
 - Reference-rate display conversion; authoritative financial inputs and records remain in organization currency
-- No editable organization settings UI
+- Organization currency management only; no organization identity editor or multi-tenancy
 
 ## Portfolio Screenshots
 

@@ -3,6 +3,7 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
 } from "./supabase-config.js";
 import { getValidAccessToken } from "./auth-service.js";
+import { getActiveWorkspace, workspaceHeaders, requireWritableWorkspace, assertWorkspaceCurrent } from "./workspace-context.js";
 
 const ROLES = new Set([
   "requester",
@@ -69,13 +70,16 @@ async function errorMessage(response, fallback) {
   return fallback;
 }
 
-async function callRpc(name, body, fallback) {
+async function callRpc(name, body, fallback, { write = false } = {}) {
+  const workspace = write ? requireWritableWorkspace() : getActiveWorkspace();
+  if (!workspace) throw new Error("Select an active workspace first.");
   let accessToken;
   try {
     accessToken = await getValidAccessToken();
   } catch {
     throw new Error("Your session could not be validated. Sign in again before continuing.");
   }
+  assertWorkspaceCurrent(workspace);
   if (!accessToken) throw new Error("Sign in to access governance roles.");
 
   const url = new URL(`/rest/v1/rpc/${name}`, SUPABASE_URL);
@@ -84,6 +88,7 @@ async function callRpc(name, body, fallback) {
     response = await fetch(url.toString(), {
       method: "POST",
       headers: {
+        ...workspaceHeaders(),
         apikey: SUPABASE_PUBLISHABLE_KEY,
         Authorization: `Bearer ${accessToken}`,
         "Content-Type": "application/json",
@@ -93,13 +98,17 @@ async function callRpc(name, body, fallback) {
   } catch {
     throw new Error(`${fallback} Check your network connection.`);
   }
+  assertWorkspaceCurrent(workspace);
 
   if (!response.ok) throw new Error(await errorMessage(response, fallback));
+  let result;
   try {
-    return await response.json();
+    result = await response.json();
   } catch {
     throw new Error("The role service returned an unreadable response. Check the current assignments before repeating a role change.");
   }
+  assertWorkspaceCurrent(workspace);
+  return result;
 }
 
 export async function getMyGovernanceRoles() {
@@ -138,7 +147,7 @@ export async function assignGovernanceRole(userId, role) {
   const result = await callRpc("assign_governance_role", {
     p_user_id: userId,
     p_role: role,
-  }, "The governance role could not be assigned.");
+  }, "The governance role could not be assigned.", { write: true });
   return normalizeAssignment(Array.isArray(result) ? result[0] : result);
 }
 
@@ -147,7 +156,7 @@ export async function revokeGovernanceRole(userId, role) {
   const result = await callRpc("revoke_governance_role", {
     p_user_id: userId,
     p_role: role,
-  }, "The governance role could not be revoked.");
+  }, "The governance role could not be revoked.", { write: true });
   if (result !== true) throw new Error("The governance role revocation could not be confirmed.");
   return true;
 }

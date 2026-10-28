@@ -1,15 +1,15 @@
-import { APP_CONFIG } from "./app-config.js";
+import { getOrganizationCurrency, getOrganizationCurrencyState, subscribeOrganizationCurrency } from "./organization-currency.js";
 import { loadFxRate } from "./fx-service.js";
 import { SUPPORTED_CURRENCIES, validateFxResponse } from "./fx-validation.js";
 
-// Accounting currency of the current organization, not a product-wide CAD rule.
-export const BASE_CURRENCY = APP_CONFIG.portfolio.currencyCode;
+// Live binding retained for existing callers; the server owns this setting.
+export let BASE_CURRENCY = getOrganizationCurrency();
 const STORAGE_KEY = "steerfold-display-currency";
 const CHANGE_EVENT = "currency:changed";
 let persistenceAvailable = true;
 
 function normalizePreference(value) {
-  return SUPPORTED_CURRENCIES.includes(value) ? value : BASE_CURRENCY;
+  return SUPPORTED_CURRENCIES.includes(value) ? value : null;
 }
 
 function readPreference() {
@@ -17,11 +17,12 @@ function readPreference() {
     return normalizePreference(localStorage.getItem(STORAGE_KEY));
   } catch {
     persistenceAvailable = false;
-    return BASE_CURRENCY;
+    return null;
   }
 }
 
-let displayCurrency = readPreference();
+let preference = readPreference();
+let displayCurrency = preference ?? BASE_CURRENCY;
 let fx = { status: displayCurrency === BASE_CURRENCY ? "ready" : "idle", base: BASE_CURRENCY, quote: displayCurrency, rate: displayCurrency === BASE_CURRENCY ? 1 : null };
 let requestVersion = 0;
 
@@ -53,16 +54,22 @@ export function getCurrencyState() {
 
 export async function refreshCurrencyRate() {
   const version = ++requestVersion;
+  const base = BASE_CURRENCY;
   const quote = displayCurrency;
   if (quote === BASE_CURRENCY) {
     fx = { status: "ready", base: BASE_CURRENCY, quote, rate: 1 };
     notifyChange();
     return getCurrencyState();
   }
+  if (getOrganizationCurrencyState().status !== "ready") {
+    fx = { status: "unavailable", base, quote, rate: null, error: "Organization currency is unverified." };
+    notifyChange();
+    return getCurrencyState();
+  }
   fx = { status: "loading", base: BASE_CURRENCY, quote, rate: null };
   notifyChange();
   const result = await loadFxRate(BASE_CURRENCY, quote);
-  if (version !== requestVersion || quote !== displayCurrency) return getCurrencyState();
+  if (version !== requestVersion || quote !== displayCurrency || base !== BASE_CURRENCY) return getCurrencyState();
   fx = result;
   notifyChange();
   return getCurrencyState();
@@ -73,9 +80,11 @@ function notifyChange() {
 }
 
 export function setDisplayCurrency(value) {
-  displayCurrency = normalizePreference(value);
+  preference = normalizePreference(value);
+  displayCurrency = preference ?? BASE_CURRENCY;
   try {
-    localStorage.setItem(STORAGE_KEY, displayCurrency);
+    if (preference) localStorage.setItem(STORAGE_KEY, preference);
+    else localStorage.removeItem(STORAGE_KEY);
     persistenceAvailable = true;
   } catch {
     persistenceAvailable = false;
@@ -93,7 +102,14 @@ export function subscribeCurrencyChanges(callback) {
 if (typeof window !== "undefined") {
   window.addEventListener("storage", (event) => {
     if (event.key !== STORAGE_KEY && event.key !== null) return;
-    displayCurrency = normalizePreference(event.newValue);
+    preference = normalizePreference(event.newValue);
+    displayCurrency = preference ?? BASE_CURRENCY;
     refreshCurrencyRate();
   });
 }
+
+subscribeOrganizationCurrency(() => {
+  BASE_CURRENCY = getOrganizationCurrency();
+  displayCurrency = preference ?? BASE_CURRENCY;
+  refreshCurrencyRate();
+});

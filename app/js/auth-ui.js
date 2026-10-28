@@ -4,28 +4,17 @@ import {
   getCurrentUser,
   isAuthenticated,
 } from "./auth-service.js";
+import * as authService from "./auth-service.js";
+import { profileInitials, profileDisplayName } from "./profile-identity.js";
 
 const PANEL_ID = "sf-auth-panel";
-const WORKFLOW_ROLE_LABELS = {
-  requester: "Requester",
-  reviewer: "Reviewer",
-  approver: "Approver",
-  baseline_controller: "Baseline Controller",
-};
-let identityUserId = null;
-let identityRoles = null;
 
-function emailInitial() {
-  const email = getCurrentUser()?.email;
-  return typeof email === "string" ? [...email.trim().toUpperCase()][0] || "?" : "?";
+function accountInitials() {
+  return profileInitials(getCurrentUser());
 }
 
 function accountLabel() {
-  if (!isAuthenticated()) return "Sign In";
-  if (identityUserId !== getCurrentUser()?.id || !identityRoles) return "Account";
-  const roles = [...new Set(identityRoles)];
-  if (roles.includes("governance_admin")) return "Admin";
-  return roles.length === 1 ? WORKFLOW_ROLE_LABELS[roles[0]] || "Account" : "Account";
+  return isAuthenticated() ? profileDisplayName(getCurrentUser()) : "Sign In";
 }
 
 function createPanel() {
@@ -192,22 +181,34 @@ function createErrorBox(message = "") {
 function renderLoggedOut(
   panel,
   message = "",
+  mode = "signin",
+  initialEmail = "",
 ) {
   panel.replaceChildren();
+  const signingUp = mode === "signup";
 
   const header = createHeader(
-    "Admin Access",
-    "Sign in to manage portfolio records. Public visitors can continue exploring the dashboard.",
+    signingUp ? "Sign Up" : "Sign In",
+    signingUp
+      ? "Create your Steerfold account."
+      : "Sign in to your Steerfold account. Public visitors can continue exploring the portfolio without signing in.",
   );
 
   const form = document.createElement("form");
   form.className = "sf-auth-form";
 
   const emailField = createField(
-    "Email",
+    signingUp ? "Email Address" : "Email",
     "email",
     "email",
   );
+  emailField.input.value = initialEmail;
+
+  const fullNameField = signingUp ? createField("Full Name", "text", "fullName") : null;
+  if (fullNameField) {
+    fullNameField.input.autocomplete = "name";
+    fullNameField.input.maxLength = 120;
+  }
 
   const passwordField = createField(
     "Password",
@@ -230,6 +231,16 @@ function renderLoggedOut(
     createPasswordToggle(passwordField.input),
   );
 
+  const confirmField = signingUp ? createField("Confirm Password", "password", "confirmPassword") : null;
+  if (signingUp) {
+    passwordField.input.autocomplete = "new-password";
+    confirmField.input.autocomplete = "new-password";
+    const confirmControl = document.createElement("div");
+    confirmControl.className = "sf-auth-password-control";
+    confirmField.wrapper.replaceChildren(confirmField.wrapper.querySelector("label"), confirmControl);
+    confirmControl.append(confirmField.input, createPasswordToggle(confirmField.input));
+  }
+
   const errorBox =
     createErrorBox(message);
 
@@ -239,7 +250,17 @@ function renderLoggedOut(
   submitButton.type = "submit";
   submitButton.className =
     "sf-auth-submit";
-  submitButton.textContent = "Sign In";
+  submitButton.textContent = signingUp ? "Sign Up" : "Sign In";
+
+  const switchButton = document.createElement("button");
+  switchButton.type = "button";
+  switchButton.className = "sf-auth-switch";
+  switchButton.textContent = signingUp ? "Return to Sign In" : "Sign Up";
+  switchButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    renderLoggedOut(panel, "", signingUp ? "signin" : "signup", emailField.input.value.trim());
+    repositionAuthView(panel);
+  });
 
   const supportText =
     document.createElement("p");
@@ -248,11 +269,16 @@ function renderLoggedOut(
   supportText.textContent =
     "Authenticated access is required for project changes.";
 
+  if (fullNameField) form.append(fullNameField.wrapper);
   form.append(
     emailField.wrapper,
     passwordField.wrapper,
+  );
+  if (confirmField) form.append(confirmField.wrapper);
+  form.append(
     errorBox,
     submitButton,
+    switchButton,
     supportText,
   );
 
@@ -265,6 +291,7 @@ function renderLoggedOut(
     "submit",
     async (event) => {
       event.preventDefault();
+      if (submitButton.disabled) return;
 
       const email =
         emailField.input.value.trim();
@@ -274,13 +301,45 @@ function renderLoggedOut(
 
       errorBox.hidden = true;
       errorBox.textContent = "";
+      if (signingUp) {
+        const fullName = fullNameField.input.value.trim();
+        let validationMessage = "";
+        let invalidInput = null;
+        if (!fullName || fullName.length > 120) {
+          validationMessage = "Enter your full name using at most 120 characters.";
+          invalidInput = fullNameField.input;
+        } else if (!email || !emailField.input.validity.valid) {
+          validationMessage = "Enter a valid email address.";
+          invalidInput = emailField.input;
+        } else if (!password) {
+          validationMessage = "Enter a password.";
+          invalidInput = passwordField.input;
+        } else if (password !== confirmField.input.value) {
+          validationMessage = "Passwords must match.";
+          invalidInput = confirmField.input;
+        }
+        if (validationMessage) {
+          errorBox.textContent = validationMessage;
+          errorBox.hidden = false;
+          invalidInput.focus();
+          return;
+        }
+      }
       submitButton.disabled = true;
+      switchButton.disabled = true;
 
       try {
-        await signIn(
-          email,
-          password,
-        );
+        if (signingUp) {
+          const result = await authService.signUp(email, password, fullNameField.input.value.trim());
+          passwordField.input.value = "";
+          confirmField.input.value = "";
+          if (result.needsEmailVerification || !result.session) {
+            if (form.isConnected && !isAuthenticated()) renderVerificationPending(panel, email);
+            return;
+          }
+        } else {
+          await signIn(email, password);
+        }
 
         window.dispatchEvent(
           new CustomEvent("auth:changed"),
@@ -288,16 +347,42 @@ function renderLoggedOut(
       } catch (error) {
         errorBox.textContent =
           error?.message ??
-          "Sign in failed.";
+          (signingUp ? "Sign up failed." : "Sign in failed.");
 
         errorBox.hidden = false;
       } finally {
         if (submitButton.isConnected) {
           submitButton.disabled = false;
+          switchButton.disabled = false;
         }
       }
     },
   );
+}
+
+function repositionAuthView(panel) {
+  const launcher = document.querySelector("[data-auth-launcher]");
+  if (panel.hidden) return;
+  if (launcher) positionPanel(launcher, panel);
+  panel.querySelector("input, button")?.focus();
+}
+
+function renderVerificationPending(panel, email) {
+  const status = document.createElement("p");
+  status.className = "sf-auth-support sf-auth-verification";
+  status.setAttribute("role", "status");
+  status.textContent = `Check ${email} for a verification link. Verify your email, then return here to sign in. You are not signed in yet.`;
+  const back = document.createElement("button");
+  back.type = "button";
+  back.className = "sf-auth-switch";
+  back.textContent = "Return to Sign In";
+  back.addEventListener("click", (event) => {
+    event.stopPropagation();
+    renderLoggedOut(panel, "", "signin", email);
+    repositionAuthView(panel);
+  });
+  panel.replaceChildren(createHeader("Check Your Email"), status, back);
+  repositionAuthView(panel);
 }
 
 function renderLoggedIn(panel) {
@@ -305,8 +390,8 @@ function renderLoggedIn(panel) {
 
   const header = createHeader(
     accountLabel(),
-    "You can create, edit and delete project records.",
-    emailInitial(),
+    "Manage your profile and available workspaces.",
+    accountInitials(),
   );
 
   const user = getCurrentUser();
@@ -433,6 +518,8 @@ function positionPanel(
     `calc(100vw - ${gutter * 2}px)`;
 
   panel.style.zIndex = "100";
+  panel.style.maxHeight = `calc(100vh - ${gutter * 2}px)`;
+  panel.style.overflowY = "auto";
 
   const panelHeight =
     panel.offsetHeight;
@@ -570,11 +657,17 @@ function updateLauncherState(button) {
   }
   if (avatar) {
     avatar.hidden = !isSignedIn;
-    avatar.textContent = isSignedIn ? emailInitial() : "";
+    avatar.textContent = isSignedIn ? accountInitials() : "";
+  }
+  if (isSignedIn && button.dataset.accountPage === "true") {
+    for (const attribute of ["aria-haspopup", "aria-expanded", "aria-controls"]) button.removeAttribute(attribute);
+  } else {
+    button.setAttribute("aria-haspopup", "dialog");
+    button.setAttribute("aria-controls", PANEL_ID);
   }
 }
 
-export function initAuthUI() {
+export function initAuthUI({ onOpenAccount } = {}) {
   const button =
     document.querySelector(
       "[data-auth-launcher]",
@@ -595,20 +688,16 @@ export function initAuthUI() {
     "true";
 
   const panel = createPanel();
+  button.dataset.accountPage = String(typeof onOpenAccount === "function");
 
-  window.addEventListener("governance:roles-changed", (event) => {
-    if (!isAuthenticated() || event.detail?.userId !== getCurrentUser()?.id) return;
-    identityUserId = event.detail.userId;
-    identityRoles = event.detail.status === "ready" && Array.isArray(event.detail.roles)
-      ? event.detail.roles : null;
+  window.addEventListener("profile:identity-changed", () => {
     updateLauncherState(button);
-    if (!panel.hidden) {
-      const title = panel.querySelector(".sf-auth-panel-title");
-      if (title) title.textContent = accountLabel();
+    const avatar = panel.querySelector(".sf-account-avatar");
+    if (avatar && isAuthenticated()) {
+      avatar.textContent = accountInitials();
+      panel.querySelector(".sf-auth-panel-title").textContent = accountLabel();
     }
   });
-
-  updateLauncherState(button);
 
   button.setAttribute(
     "aria-expanded",
@@ -624,10 +713,16 @@ export function initAuthUI() {
     "aria-haspopup",
     "dialog",
   );
+  updateLauncherState(button);
 
   button.addEventListener(
     "click",
     () => {
+      if (isAuthenticated() && typeof onOpenAccount === "function") {
+        if (!panel.hidden) closePanel(panel, button);
+        onOpenAccount();
+        return;
+      }
       if (!panel.hidden) {
         closePanel(
           panel,
@@ -703,9 +798,13 @@ export function initAuthUI() {
   window.addEventListener(
     "auth:changed",
     (event) => {
-      identityUserId = null;
-      identityRoles = null;
       updateLauncherState(button);
+
+      if (isAuthenticated() && typeof onOpenAccount === "function" && !panel.hidden) {
+        closePanel(panel, button);
+        updateLauncherState(button);
+        return;
+      }
 
       if (panel.hidden) {
         return;

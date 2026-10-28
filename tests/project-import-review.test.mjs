@@ -23,7 +23,7 @@ function response(warnings = [], blocking = []) {
     requires_acknowledgement: !!warnings.length, blocking_conflicts: blocking, warnings };
 }
 
-test("payload is selected normalized CAD data with only the fourteen allowed project fields", () => {
+test("payload is selected normalized organization-currency data with only the fourteen allowed project fields", () => {
   assert.equal(payload.rows.length, 1);
   assert.equal(payload.rows[0].source_row, 2);
   assert.equal(payload.rows[0].source_project_id, "TEST-002");
@@ -111,19 +111,39 @@ test("material invalidation clears server hash, results and acknowledgements and
 });
 
 const serviceSource = await readFile(new URL("../app/js/project-import-service.js", import.meta.url), "utf8");
-async function service({ token = "fixture-token", authError = false, status = 200, body = response(), nonJson = false, networkError = false } = {}) {
+async function service({ token = "fixture-token", authError = false, status = 200, body = response(), nonJson = false, networkError = false,
+  workspace = { id: "workspace-id", canWrite: true, isDemo: false }, onToken, onFetch, onJson } = {}) {
+  let currentWorkspace = workspace;
+  const switchWorkspace = () => { currentWorkspace = { id: "other-id", canWrite: true, isDemo: false }; };
+  const workspaceContext = {
+    getActiveWorkspace: () => currentWorkspace,
+    workspaceHeaders: () => {
+      if (!currentWorkspace) throw new Error("Select an active workspace first.");
+      return { "x-steerfold-organization-id": currentWorkspace.id };
+    },
+    requireWritableWorkspace: () => {
+      if (!currentWorkspace || currentWorkspace.isDemo || !currentWorkspace.canWrite) throw new Error("Workspace is not writable.");
+      return currentWorkspace;
+    },
+    assertWorkspaceCurrent: (captured) => {
+      if (!captured || captured !== currentWorkspace) throw new Error("Active workspace changed.");
+    },
+  };
   const requests = [];
   const context = vm.createContext({ AbortController, setTimeout, clearTimeout, TypeError, fetch: async (url, options) => {
     requests.push({ url, options });
+    onFetch?.(switchWorkspace);
     if (networkError) throw new TypeError("Failed to fetch");
-    return { ok: status >= 200 && status < 300, status, json: async () => { if (nonJson) throw new Error("non JSON"); return body; } };
+    return { ok: status >= 200 && status < 300, status, json: async () => { onJson?.(switchWorkspace); if (nonJson) throw new Error("non JSON"); return body; } };
   } });
   const module = new vm.SourceTextModule(serviceSource, { context });
   await module.link((specifier) => {
     const exports = specifier === "./supabase-config.js"
       ? { SUPABASE_URL: "https://fixture.invalid", SUPABASE_PUBLISHABLE_KEY: "publishable-fixture" }
+      : specifier === "./workspace-context.js" ? workspaceContext
       : specifier === "./auth-service.js"
-        ? { getValidAccessToken: async () => { if (authError) throw new Error("refresh failed"); return token; } }
+        ? { getValidAccessToken: async () => { onToken?.(switchWorkspace); if (authError) throw new Error("refresh failed"); return token; } }
+        : specifier === "./organization-currency.js" ? { requireOrganizationCurrency: () => "CAD" }
         : specifier === "./import-commit-state.js" ? { normalizeProjectImportResult }
           : { normalizeImportAnalysis };
     return new vm.SyntheticModule(Object.keys(exports), function () {
@@ -143,6 +163,7 @@ test("transport calls only the read-only check RPC with authenticated PostgREST 
   assert.equal(url, "https://fixture.invalid/rest/v1/rpc/check_project_import");
   assert.equal(options.method, "POST");
   assert.equal(options.headers.apikey, "publishable-fixture");
+  assert.equal(options.headers["x-steerfold-organization-id"], "workspace-id");
   assert.equal(options.headers.Authorization, "Bearer fixture-token");
   assert.equal(options.headers["Content-Type"], "application/json");
   assert.deepEqual(JSON.parse(options.body), { p_payload: payload });
@@ -168,5 +189,21 @@ test("RPC, network, non-JSON and invalid-contract failures are explicit and neve
     const fixture = await service(options);
     await assert.rejects(fixture.check(payload), message);
     assert.equal(fixture.requests.length, 1);
+  }
+});
+
+test("conflict checks block demo, read-only and unresolved workspaces", async () => {
+  for (const workspace of [null, { id: "demo", isDemo: true, canWrite: false }, { id: "read", isDemo: false, canWrite: false }]) {
+    const f = await service({ workspace });
+    await assert.rejects(f.check(payload), /not writable/);
+    assert.equal(f.requests.length, 0);
+  }
+});
+
+test("conflict checks reject workspace changes during token, fetch and body awaits", async () => {
+  for (const hook of ["onToken", "onFetch", "onJson"]) {
+    const f = await service({ [hook]: (switchWorkspace) => switchWorkspace() });
+    await assert.rejects(f.check(payload), /workspace changed/);
+    assert.equal(f.requests.length, hook === "onToken" ? 0 : 1);
   }
 });

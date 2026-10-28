@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-sf-theme="dark">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Offline Account and Settings QA</title>
+  <link rel="stylesheet" href="../../app/styles.css">
+  <script type="importmap">{"imports": {
+    "/app/js/auth-service.js": "/tests/fixtures/account-settings-mock.js",
+    "/app/js/governance-role-service.js": "/tests/fixtures/account-settings-mock.js"
+  }}</script>
+</head>
+<body>
+  <main style="padding:24px;max-width:900px;margin:auto;box-sizing:border-box;min-width:0">
+    <h1>Offline Account and Settings QA</h1>
+    <p>Synthetic accounts and local mock persistence only. No live database, password or email operations.</p>
+    <div class="sf-settings-actions"><button type="button" id="fixture-account">Account</button><button type="button" id="fixture-settings">Settings</button><button type="button" id="fixture-login">Sign In Fixture</button></div>
+    <p><label><input type="checkbox" id="fixture-admin"> Governance Admin fixture</label></p>
+    <p><label><input type="checkbox" id="fixture-failure"> Simulate unavailable backend</label></p>
+    <p><label><input type="checkbox" id="fixture-light"> Light theme preview</label></p>
+    <p id="fixture-counts" role="status"></p>
+    <button type="button" class="sf-sidebar-account-button" data-auth-launcher><span class="sf-sidebar-account-label">Account</span></button>
+    <div id="fixture-pages"></div>
+  </main>
+  <script type="module">
+    import { installOfflineBackend, state, counts, authenticate, setAdmin } from './account-settings-mock.js';
+    const source = new DOMParser().parseFromString(await (await fetch('../../app/index.html')).text(), 'text/html');
+    const pages = document.querySelector('#fixture-pages');
+    pages.append(source.querySelector('[data-settings-view]'), source.querySelector('[data-account-view]'));
+    installOfflineBackend();
+    const { initProfileSettings } = await import('../../app/js/profile-settings-ui.js');
+    const { initOrganizationCurrencySettings } = await import('../../app/js/organization-settings-ui.js');
+    const { initAccountSecurity } = await import('../../app/js/account-security-ui.js');
+    const { initAuthUI } = await import('../../app/js/auth-ui.js');
+    const { pushAccountRoute, pushSettingsRoute, getCurrentRoute, listenForRouteChanges } = await import('../../app/js/router.js');
+    function render() {
+      document.querySelector('[data-settings-view]').hidden = getCurrentRoute().view === 'account';
+      document.querySelector('[data-account-view]').hidden = getCurrentRoute().view !== 'account';
+      document.querySelector('#fixture-counts').textContent = `Offline profile writes: ${counts.profileWrites}; company writes: ${counts.organizationWrites}; security requests: ${counts.securityRequests}.`;
+    }
+    const profiles = initProfileSettings();
+    await initOrganizationCurrencySettings({ onAdminChange: profiles.setAdmin }).ready;
+    initAccountSecurity();
+    initAuthUI({ onOpenAccount: () => { pushAccountRoute(); render(); } });
+    listenForRouteChanges(render);
+    document.querySelector('#fixture-account').onclick = () => { pushAccountRoute(); render(); };
+    document.querySelector('#fixture-settings').onclick = () => { pushSettingsRoute(); render(); };
+    document.querySelector('#fixture-login').onclick = () => { authenticate(true); render(); };
+    document.querySelector('#fixture-admin').checked = state.admin;
+    document.querySelector('#fixture-admin').onchange = (event) => setAdmin(event.target.checked);
+    document.querySelector('#fixture-light').onchange = (event) => { document.documentElement.dataset.sfTheme = event.target.checked ? 'light' : 'dark'; };
+    window.addEventListener('profile:identity-changed', render);
+    window.addEventListener('organization:profile-changed', render);
+    window.addEventListener('auth:changed', render);
+    document.addEventListener('click', () => queueMicrotask(render));
+    render();
+  </script>
+</body>
+</html>

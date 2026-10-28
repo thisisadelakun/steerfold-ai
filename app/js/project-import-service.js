@@ -2,6 +2,8 @@ import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "./supabase-config.js";
 import { getValidAccessToken } from "./auth-service.js";
 import { normalizeImportAnalysis } from "./import-conflict-review.js";
 import { normalizeProjectImportResult } from "./import-commit-state.js";
+import { requireOrganizationCurrency } from "./organization-currency.js";
+import { getActiveWorkspace, workspaceHeaders, requireWritableWorkspace, assertWorkspaceCurrent } from "./workspace-context.js";
 
 export class ImportRequestError extends Error {
   constructor(message, { uncertain = false, requiresReview = false, code = null } = {}) {
@@ -13,20 +15,27 @@ export class ImportRequestError extends Error {
 }
 
 async function importRpc(name, args, { write = false } = {}) {
+  const workspace = write ? requireWritableWorkspace() : getActiveWorkspace();
+  if (!workspace) throw new ImportRequestError("Select an active workspace first.");
   let token;
   try { token = await getValidAccessToken(); }
   catch { throw new ImportRequestError("Your session could not be refreshed. Sign in again with the same account."); }
+  assertWorkspaceCurrent(workspace);
   if (!token) throw new ImportRequestError("Sign in with the account that started this import.");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   try {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${name}`, {
       method: "POST",
-      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { ...workspaceHeaders(), apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify(args), signal: controller.signal,
     });
+    try { assertWorkspaceCurrent(workspace); }
+    catch (error) { throw new ImportRequestError(error.message, { uncertain: write }); }
     let body;
     try { body = await response.json(); } catch { /* An unreadable write response has an uncertain outcome. */ }
+    try { assertWorkspaceCurrent(workspace); }
+    catch (error) { throw new ImportRequestError(error.message, { uncertain: write }); }
     if (!response.ok) {
       const code = typeof body?.code === "string" ? body.code : null;
       const options = { code };
@@ -63,22 +72,29 @@ export async function getProjectImportResult(idempotencyKey) {
 }
 
 export async function checkProjectImport(payload) {
+  const workspace = requireWritableWorkspace();
   let token;
   try { token = await getValidAccessToken(); }
   catch { throw new Error("Your session could not be refreshed. Sign in again to review conflicts."); }
+  assertWorkspaceCurrent(workspace);
   if (!token) throw new Error("Sign in to review import conflicts.");
+  if (payload.currency_code !== requireOrganizationCurrency()) {
+    throw new Error("Organization currency changed. Review the staged values again before checking conflicts.");
+  }
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   try {
     const response = await fetch(`${SUPABASE_URL}/rest/v1/rpc/check_project_import`, {
       method: "POST",
-      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+      headers: { ...workspaceHeaders(), apikey: SUPABASE_PUBLISHABLE_KEY, Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
       body: JSON.stringify({ p_payload: payload }),
       signal: controller.signal,
     });
+    assertWorkspaceCurrent(workspace);
     let body;
     try { body = await response.json(); }
     catch { throw new Error("The conflict service returned an unreadable response. No review was completed."); }
+    assertWorkspaceCurrent(workspace);
     if (!response.ok) {
       if ([401, 403].includes(response.status) || body?.code === "42501") {
         throw new Error("Your session is unavailable or not permitted to review imports. Sign in again.");

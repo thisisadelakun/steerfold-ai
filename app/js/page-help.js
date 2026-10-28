@@ -79,6 +79,15 @@ const HELP = {
       ["Preferences stay in this browser. Stored project and governance values remain in organization currency."],
     ],
   },
+  account: {
+    title: "Account",
+    purpose: "Manage your own personal profile and account security.",
+    steps: [
+      ["Save your full name and optional job title. Your email is managed through authentication."],
+      ["Change your password using Supabase verification when required."],
+      ["Sign out when you finish using a shared device."],
+    ],
+  },
   project: {
     title: "Project Detail",
     purpose: "Inspect the selected project's delivery, financial and forecast performance.",

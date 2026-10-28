@@ -5,6 +5,8 @@ import { getCurrentUser, isAuthenticated } from "./auth-service.js";
 import { checkProjectImport, commitProjectImport, getProjectImportResult } from "./project-import-service.js";
 import { buildProjectImportPayload, CONFLICT_MESSAGES, createConflictReview } from "./import-conflict-review.js";
 import { createImportAttempt, normalizeProjectImportResult } from "./import-commit-state.js";
+import { getOrganizationCurrencyState, subscribeOrganizationCurrency } from "./organization-currency.js";
+import { getActiveWorkspace, canWriteWorkspace } from "./workspace-context.js";
 
 const STEPS = ["Upload", "Map Columns", "Validate", "Preview", "Conflict Review"];
 const PAGE_SIZE = 25;
@@ -30,6 +32,7 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
     return;
   }
   const opener = document.activeElement;
+  const workspaceId = getActiveWorkspace()?.id;
   const dialog = element("dialog", "", "sf-import-dialog");
   dialog.id = "sf-project-import";
   dialog.setAttribute("aria-labelledby", "sf-import-title");
@@ -56,6 +59,21 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
   const heading = element("h2", "Import Projects");
   heading.id = "sf-import-title";
   const context = element("p", `Financial inputs use ${APP_CONFIG.portfolio.currencyCode}. Projects are created only after server conflict review and your explicit final confirmation.`, "sf-import-context");
+  let stagedCurrency = APP_CONFIG.portfolio.currencyCode;
+  function synchronizeCurrency() {
+    if (state.busy || attempt.uncertain || attempt.result) return;
+    const currency = APP_CONFIG.portfolio.currencyCode;
+    if (currency !== stagedCurrency) {
+      stagedCurrency = currency;
+      const selectedRows = state.selectedRows;
+      revalidate();
+      state.selectedRows = new Set([...state.selectedRows].filter((row) => selectedRows.has(row)));
+      state.error = "Organization currency changed. Check the staged financial values and review conflicts again.";
+    }
+  }
+  const stopCurrencyUpdates = subscribeOrganizationCurrency(() => {
+    if (!state.busy && !attempt.uncertain && !attempt.result) render();
+  });
   dialog.append(heading, context, steps, status, error, content, footer);
 
   function close() {
@@ -67,7 +85,9 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
       return;
     }
     window.removeEventListener("auth:changed", onAuthChanged);
+    window.removeEventListener("workspace:changed", onWorkspaceChanged);
     window.removeEventListener("beforeunload", onBeforeUnload);
+    stopCurrencyUpdates();
     invalidateReview();
     dialog.close();
     dialog.remove();
@@ -114,7 +134,7 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
   }
 
   function canReview() {
-    return !state.busy && !attempt.uncertain && !attempt.result && isAuthenticated() && !!state.source && !!state.results
+    return getActiveWorkspace()?.id === workspaceId && canWriteWorkspace() && getOrganizationCurrencyState().status === "ready" && !state.busy && !attempt.uncertain && !attempt.result && isAuthenticated() && !!state.source && !!state.results
       && !state.results.mappingIssues.length && !state.results.summary.error && state.selectedRows.size > 0;
   }
 
@@ -151,7 +171,7 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
   }
 
   function sameActor() {
-    return isAuthenticated() && getCurrentUser()?.id === attempt.snapshot?.actorId;
+    return getActiveWorkspace()?.id === workspaceId && isAuthenticated() && getCurrentUser()?.id === attempt.snapshot?.actorId;
   }
 
   function currentPayload() {
@@ -161,7 +181,8 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
   }
 
   function canCommit() {
-    return !state.busy && sameActor() && review.ready && attempt.confirmed && !attempt.result
+    return getOrganizationCurrencyState().status === "ready" && state.payload?.currency_code === APP_CONFIG.portfolio.currencyCode
+      && !state.busy && sameActor() && review.ready && attempt.confirmed && !attempt.result
       && attempt.snapshot.payloadHash === review.analysis.payload_hash;
   }
 
@@ -631,7 +652,7 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
     const summary = element("dl", "", "sf-import-conflict-summary");
     [["Rows selected", state.payload.rows.length], ["Source namespace", state.payload.source_namespace || "None"],
       ["Warnings acknowledged", `${review.acknowledgedCount} of ${review.analysis.warning_count}`],
-      ["Server conflict check", "Complete"], ["Currency", "CAD"]]
+      ["Server conflict check", "Complete"], ["Currency", state.payload.currency_code]]
       .forEach(([label, value]) => summary.append(element("dt", label), element("dd", String(value))));
     target.append(summary, element("p", "New projects will be created. Existing projects will not be updated or merged."),
       element("p", "Steerfold will generate new project IDs."));
@@ -716,6 +737,8 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
   }
 
   function render(focusId = null) {
+    synchronizeCurrency();
+    context.textContent = `Financial inputs use ${stagedCurrency}. ${getOrganizationCurrencyState().status !== "ready" ? "Organization currency is unverified; server review is unavailable. " : ""}Projects are created only after server conflict review and your explicit final confirmation.`;
     steps.replaceChildren();
     STEPS.forEach((name, index) => {
       const item = element("li");
@@ -733,6 +756,11 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
     dialog.setAttribute("aria-busy", String(state.busy));
     content.replaceChildren();
     footer.replaceChildren();
+    if (getActiveWorkspace()?.id !== workspaceId) {
+      content.append(element("p", "This import belongs to another workspace. Close this dialog and select the original workspace to continue or recover its result."));
+      footer.append(button("Close", () => { if (!state.busy) dialog.close(); }));
+      return;
+    }
     if (attempt.result) {
       if (sameActor()) renderComplete();
       else { content.append(element("p", "Import completed. Sign in with the original account to view its result.")); footer.append(button("Close", close)); }
@@ -791,6 +819,8 @@ export function openProjectImport({ onImported, onViewProjects } = {}) {
   }
 
   dialog.addEventListener("cancel", (event) => { event.preventDefault(); if (attempt.uncertain || attempt.result) close(); else confirmDiscard(close); });
+  function onWorkspaceChanged() { render(); }
+  window.addEventListener("workspace:changed", onWorkspaceChanged);
   window.addEventListener("auth:changed", onAuthChanged);
   window.addEventListener("beforeunload", onBeforeUnload);
   document.body.append(dialog);

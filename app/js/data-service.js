@@ -4,6 +4,13 @@ import {
 } from "./supabase-config.js";
 
 import { getValidAccessToken } from "./auth-service.js";
+import { getActiveWorkspace, workspaceHeaders, requireWritableWorkspace, assertWorkspaceCurrent } from "./workspace-context.js";
+
+function requireWorkspace() {
+  const workspace = getActiveWorkspace();
+  if (!workspace) throw new Error("Select an active workspace first.");
+  return workspace;
+}
 
 const PROJECTS_CSV_PATH = "data/Steerfold_AI_Project_Data.csv";
 
@@ -104,7 +111,10 @@ function normalizeProject(row) {
 }
 
 async function loadProjectsFromCsv() {
+  const workspace = requireWorkspace();
+  if (!workspace.isDemo) throw new Error("CSV data is available only in the demo workspace.");
   const response = await fetch(PROJECTS_CSV_PATH);
+  assertWorkspaceCurrent(workspace);
 
   if (!response.ok) {
     throw new Error(
@@ -114,6 +124,7 @@ async function loadProjectsFromCsv() {
   }
 
   const csvText = await response.text();
+  assertWorkspaceCurrent(workspace);
 
   return parseCsv(csvText).map(normalizeProject);
 }
@@ -274,18 +285,20 @@ function mapProjectToSupabaseRow(project) {
   };
 }
 
-async function getAuthenticatedHeaders() {
+async function getAuthenticatedHeaders(workspace, { optional = false } = {}) {
   const accessToken = await getValidAccessToken();
+  assertWorkspaceCurrent(workspace);
 
-  if (!accessToken) {
+  if (!accessToken && !optional) {
     throw new Error(
       "Authentication is required to modify projects.",
     );
   }
 
   return {
+    ...workspaceHeaders(),
     apikey: SUPABASE_PUBLISHABLE_KEY,
-    Authorization: `Bearer ${accessToken}`,
+    ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     "Content-Type": "application/json",
   };
 }
@@ -338,7 +351,11 @@ const csvProvider = {
 
 const supabaseProvider = {
   async loadProjects() {
+    const workspace = requireWorkspace();
+    const headers = await getAuthenticatedHeaders(workspace, { optional: true });
+    assertWorkspaceCurrent(workspace);
     const url = new URL("/rest/v1/projects", SUPABASE_URL);
+    url.searchParams.set("organization_id", `eq.${workspace.id}`);
     url.searchParams.set("select", "*");
     url.searchParams.set("order", "project_id.asc");
 
@@ -347,13 +364,15 @@ const supabaseProvider = {
 
     for (let page = 0; page < PROJECT_READ_MAX_PAGES; page += 1) {
       const start = page * PROJECT_READ_PAGE_SIZE;
+      assertWorkspaceCurrent(workspace);
       const response = await fetch(url.toString(), {
         headers: {
-          apikey: SUPABASE_PUBLISHABLE_KEY,
+          ...headers,
           "Range-Unit": "items",
           Range: `${start}-${start + PROJECT_READ_PAGE_SIZE - 1}`,
         },
       });
+      assertWorkspaceCurrent(workspace);
 
       if (!response.ok) {
         throw new Error(
@@ -362,6 +381,7 @@ const supabaseProvider = {
       }
 
       const rows = await response.json();
+      assertWorkspaceCurrent(workspace);
 
       if (!Array.isArray(rows) || rows.length > PROJECT_READ_PAGE_SIZE) {
         throw new Error("Supabase loadProjects returned an invalid project page.");
@@ -386,16 +406,19 @@ const supabaseProvider = {
   },
 
   async getProject(projectId) {
+    const workspace = requireWorkspace();
+    const headers = await getAuthenticatedHeaders(workspace, { optional: true });
+    assertWorkspaceCurrent(workspace);
     const url = new URL("/rest/v1/projects", SUPABASE_URL);
+    url.searchParams.set("organization_id", `eq.${workspace.id}`);
     url.searchParams.set("select", "*");
     url.searchParams.set("project_id", `eq.${projectId}`);
     url.searchParams.set("limit", "1");
 
     const response = await fetch(url.toString(), {
-      headers: {
-        apikey: SUPABASE_PUBLISHABLE_KEY,
-      },
+      headers,
     });
+    assertWorkspaceCurrent(workspace);
 
     if (!response.ok) {
       throw new Error(
@@ -404,6 +427,7 @@ const supabaseProvider = {
     }
 
     const rows = await response.json();
+    assertWorkspaceCurrent(workspace);
 
     if (!rows || rows.length === 0) {
       return null;
@@ -413,18 +437,23 @@ const supabaseProvider = {
   },
 
   async createProject(projectData) {
+    const workspace = requireWritableWorkspace();
+    const headers = await getAuthenticatedHeaders(workspace);
+    assertWorkspaceCurrent(workspace);
     const url = new URL("/rest/v1/projects", SUPABASE_URL);
+    url.searchParams.set("organization_id", `eq.${workspace.id}`);
 
     const response = await fetch(url.toString(), {
       method: "POST",
       headers: {
-        ...(await getAuthenticatedHeaders()),
+        ...headers,
         Prefer: "return=representation",
       },
       body: JSON.stringify(
-        mapProjectToSupabaseRow(projectData),
+        { ...mapProjectToSupabaseRow(projectData), organization_id: workspace.id },
       ),
     });
+    assertWorkspaceCurrent(workspace);
 
     if (!response.ok) {
       throw new Error(
@@ -436,6 +465,7 @@ const supabaseProvider = {
     }
 
     const rows = await parseReturnedRows(response);
+    assertWorkspaceCurrent(workspace);
 
     if (!rows || rows.length === 0) {
       throw new Error(
@@ -447,19 +477,24 @@ const supabaseProvider = {
   },
 
   async updateProject(projectId, projectData) {
+    const workspace = requireWritableWorkspace();
+    const headers = await getAuthenticatedHeaders(workspace);
+    assertWorkspaceCurrent(workspace);
     const url = new URL("/rest/v1/projects", SUPABASE_URL);
+    url.searchParams.set("organization_id", `eq.${workspace.id}`);
     url.searchParams.set("project_id", `eq.${projectId}`);
 
     const response = await fetch(url.toString(), {
       method: "PATCH",
       headers: {
-        ...(await getAuthenticatedHeaders()),
+        ...headers,
         Prefer: "return=representation",
       },
       body: JSON.stringify(
         mapProjectToSupabaseRow(projectData),
       ),
     });
+    assertWorkspaceCurrent(workspace);
 
     if (!response.ok) {
       throw new Error(
@@ -471,6 +506,7 @@ const supabaseProvider = {
     }
 
     const rows = await parseReturnedRows(response);
+    assertWorkspaceCurrent(workspace);
 
     if (!rows || rows.length === 0) {
       throw new Error(
@@ -482,16 +518,21 @@ const supabaseProvider = {
   },
 
   async deleteProject(projectId) {
+    const workspace = requireWritableWorkspace();
+    const headers = await getAuthenticatedHeaders(workspace);
+    assertWorkspaceCurrent(workspace);
     const url = new URL("/rest/v1/projects", SUPABASE_URL);
+    url.searchParams.set("organization_id", `eq.${workspace.id}`);
     url.searchParams.set("project_id", `eq.${projectId}`);
 
     const response = await fetch(url.toString(), {
       method: "DELETE",
       headers: {
-        ...(await getAuthenticatedHeaders()),
+        ...headers,
         Prefer: "return=representation",
       },
     });
+    assertWorkspaceCurrent(workspace);
 
     if (!response.ok) {
       throw new Error(
@@ -503,6 +544,7 @@ const supabaseProvider = {
     }
 
     const rows = await parseReturnedRows(response);
+    assertWorkspaceCurrent(workspace);
 
     if (!rows || rows.length === 0) {
       throw new Error(
@@ -517,19 +559,25 @@ const supabaseProvider = {
 export async function loadPortfolioData({
   allowCsvFallback = true,
 } = {}) {
+  const workspace = requireWorkspace();
   if (USE_SUPABASE === false) {
+    if (!workspace.isDemo) throw new Error("CSV data is available only in the Demo Workspace.");
+    const projects = await csvProvider.loadProjects();
+    assertWorkspaceCurrent(workspace);
     lastPortfolioDataSource = "csv";
-    return csvProvider.loadProjects();
+    return projects;
   }
 
   try {
     const projects = await supabaseProvider.loadProjects();
+    assertWorkspaceCurrent(workspace);
 
     lastPortfolioDataSource = "supabase";
 
     return projects;
   } catch (error) {
-    if (!allowCsvFallback) {
+    assertWorkspaceCurrent(workspace);
+    if (!allowCsvFallback || !workspace.isDemo) {
       throw error;
     }
 
@@ -539,6 +587,7 @@ export async function loadPortfolioData({
     );
 
     const projects = await csvProvider.loadProjects();
+    assertWorkspaceCurrent(workspace);
 
     lastPortfolioDataSource = "csv-fallback";
 
@@ -551,19 +600,27 @@ export function getLastPortfolioDataSource() {
 }
 
 export async function getProject(projectId) {
+  const workspace = requireWorkspace();
   if (USE_SUPABASE === false) {
-    return csvProvider.getProject(projectId);
+    if (!workspace.isDemo) throw new Error("CSV data is available only in the Demo Workspace.");
+    const project = await csvProvider.getProject(projectId);
+    assertWorkspaceCurrent(workspace);
+    return project;
   }
 
   try {
     return await supabaseProvider.getProject(projectId);
   } catch (error) {
+    assertWorkspaceCurrent(workspace);
+    if (!workspace.isDemo) throw error;
     console.warn(
       "Supabase project load failed. Falling back to CSV.",
       error,
     );
 
-    return csvProvider.getProject(projectId);
+    const project = await csvProvider.getProject(projectId);
+    assertWorkspaceCurrent(workspace);
+    return project;
   }
 }
 

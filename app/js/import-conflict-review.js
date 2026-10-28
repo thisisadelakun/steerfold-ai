@@ -1,3 +1,5 @@
+import { getOrganizationCurrency } from "./organization-currency.js";
+
 const PROJECT_FIELDS = {
   projectName: "project_name", projectManager: "project_manager", projectType: "project_type",
   strategicPriority: "strategic_priority", budgetBAC: "budget_bac", plannedValuePV: "planned_value_pv",
@@ -18,7 +20,7 @@ export function buildProjectImportPayload({ results, selectedRows, fileName, wor
     file_name: fileName,
     worksheet_name: worksheetName || null,
     source_namespace: sourceNamespace?.trim() || null,
-    currency_code: "CAD",
+    currency_code: getOrganizationCurrency(),
     rows: rows.map((row) => ({
       source_row: row.rowNumber,
       source_project_id: row.project.projectId?.trim() || null,

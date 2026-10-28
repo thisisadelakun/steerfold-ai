@@ -55,8 +55,11 @@ import {
   pushDecisionSupportRoute,
   pushGovernanceRoute,
   pushSettingsRoute,
+  pushAccountRoute,
   pushStakeholderViewRoute,
   listenForRouteChanges,
+  suspendWorkspaceRoute,
+  restoreWorkspaceRoute,
 } from "./router.js";
 
 import {
@@ -66,6 +69,14 @@ import {
 } from "./ui-components.js";
 
 import { initAuthUI } from "./auth-ui.js";
+import { initOrganizationCurrencySettings } from "./organization-settings-ui.js";
+import { initProfileSettings } from "./profile-settings-ui.js";
+import { initAccountSecurity } from "./account-security-ui.js";
+import { initWorkspaceUI } from "./workspace-ui.js";
+import { getActiveWorkspace, getWorkspaceRevision, canWriteWorkspace, requireWritableWorkspace, assertWorkspaceCurrent } from "./workspace-context.js";
+import { resetWorkspaceCurrency } from "./organization-currency.js";
+import { loadOrganizationSettings } from "./organization-settings-service.js";
+import { acceptOrganizationName } from "./organization-config.js";
 
 import { initOnboardingTour } from "./onboarding-tour.js";
 import { openPageHelp } from "./page-help.js";
@@ -262,12 +273,17 @@ const SteerfoldApp = {
 
   governanceWorkflowRestore: null,
 
-    init() {
+    async init() {
     document.documentElement.dataset.sfReady = "true";
 
     this.cacheElements();
     this.applyAppConfig();
     this.setupCurrencyPreferences();
+    const profileSettings = initProfileSettings();
+    this.organizationSettings = initOrganizationCurrencySettings({ onAdminChange: profileSettings.setAdmin });
+    window.addEventListener("organization:profile-changed", () => {
+      if (this.organizationContext) this.organizationContext.textContent = `${APP_CONFIG.organization.shortName} Portfolio`;
+    });
     this.setupSidebar();
     this.setupFilters();
     this.setupProjectFilters();
@@ -278,13 +294,56 @@ const SteerfoldApp = {
     this.setupExportControls();
     this.setupRouting();
     this.setupAuthChanges();
-    initAuthUI();
+    initAuthUI({ onOpenAccount: () => {
+      pushAccountRoute();
+      this.renderRouteFromUrl();
+      if (this.isSmallScreen()) this.closeSidebar();
+    } });
+    initAccountSecurity();
     initOnboardingTour({ onHelp: () => openPageHelp(this.activeHeaderView, this.helpButton) });
     this.helpButton = this.accountArea?.querySelector(".sf-tour-button");
     this.setupCalculatorControl();
     this.updateHeaderActionsForView(getCurrentRoute().view);
     initVisualizationMotion(document.querySelector(".sf-main-content"));
-    this.loadDashboard();
+    if (["account", "settings"].includes(getCurrentRoute().view)) this.renderRouteFromUrl();
+    this.workspaceUI = initWorkspaceUI({
+      onPrepare: () => {
+        this.dashboardLoadVersion = (this.dashboardLoadVersion || 0) + 1;
+        this.state.projects = [];
+        this.state.filteredProjects = [];
+        this.state.currentProjectId = null;
+        this.governanceWorkflowRestore = null;
+        this.governanceWorkflow?.handleAuthChange();
+        this.governanceWorkflow = null;
+        this.projectDetail.replaceChildren();
+        resetWorkspaceCurrency();
+        this.setPortfolioContextVisibility(false);
+        this.setDataSourceNoticeVisibility(false);
+        this.renderProjectsPageActions();
+      },
+      onWorkspace: async (workspace) => {
+        acceptOrganizationName(workspace.name);
+        if (this.organizationContext) this.organizationContext.textContent = `${workspace.name} Portfolio`;
+        resetWorkspaceCurrency(workspace.currency);
+        window.dispatchEvent(new CustomEvent("workspace:changed"));
+        await loadOrganizationSettings();
+        assertWorkspaceCurrent(workspace);
+        await this.loadDashboard({ allowCsvFallback: workspace.isDemo, throwOnError: true });
+      },
+      onPortfolio: () => {
+        this.navigateToPortfolio();
+        if (this.isSmallScreen()) this.closeSidebar();
+      },
+      onReady: () => {
+        const restored = restoreWorkspaceRoute();
+        this.renderRouteFromUrl();
+        return restored;
+      },
+      onCreateProject: () => this.openNewProjectForm(),
+      onImport: () => { this.navigateToProjects(); this.projectsSection.querySelector(".sf-project-import-button")?.click(); },
+    });
+    await this.workspaceUI.ready;
+    this.renderRouteFromUrl();
   },
 
   cacheElements() {
@@ -300,9 +359,6 @@ const SteerfoldApp = {
       "[data-page-supporting-line]",
     );
     this.governanceBadge = document.querySelector("[data-governance-badge]");
-    this.currencyIndicator = document.querySelector(
-      "[data-currency-indicator]",
-    );
     this.displayCurrencySelect = document.querySelector("[data-display-currency]");
     this.currencyStatus = document.querySelector("[data-currency-status]");
     this.currencyPreview = document.querySelector("[data-currency-preview]");
@@ -313,6 +369,7 @@ const SteerfoldApp = {
     );
     this.mainArea = document.querySelector(".sf-main-area");
     this.settingsView = document.querySelector("[data-settings-view]");
+    this.accountView = document.querySelector("[data-account-view]");
 
     this.portfolioOverviewViews = document.querySelectorAll(
       "[data-portfolio-overview]",
@@ -488,44 +545,7 @@ const SteerfoldApp = {
       );
     }
 
-    this.renderCurrencyIndicator();
     this.setupPortfolioContext();
-  },
-
-  renderCurrencyIndicator() {
-    if (!this.currencyIndicator) {
-      return;
-    }
-
-    const { displayCurrency, organizationCurrency, conversionRequired, fxStatus } = getCurrencyState();
-    const conversionReady = conversionRequired && fxStatus === "ready";
-    const label =
-      document.createElement("span");
-
-    label.className = "sf-currency-label";
-    label.textContent =
-      `Currency ${String.fromCharCode(183)}`;
-
-    this.currencyIndicator.setAttribute(
-      "aria-label",
-      conversionRequired
-        ? conversionReady
-          ? `Display currency: ${displayCurrency}. Converted from ${organizationCurrency}.`
-          : `Display preference: ${displayCurrency}. Conversion unavailable; values remain in ${organizationCurrency}.`
-        : `Display currency: ${displayCurrency}`,
-    );
-
-    this.currencyIndicator.replaceChildren(
-      label,
-      document.createTextNode(` ${displayCurrency}`),
-    );
-    this.currencyIndicator.dataset.fxDetail = String(conversionRequired);
-    if (conversionRequired) {
-      const status = document.createElement("span");
-      status.className = "sf-currency-fallback";
-      status.textContent = conversionReady ? `Converted from ${organizationCurrency}` : `Values in ${organizationCurrency}`;
-      this.currencyIndicator.append(status);
-    }
   },
 
   setupCurrencyPreferences() {
@@ -546,11 +566,10 @@ const SteerfoldApp = {
           this.currencyStatus.append(row);
         };
         if (!state.conversionRequired) {
-          addStatusRow(`Values are displayed in ${state.baseCurrency}.`);
           addStatusRow("No exchange rate is required.");
         } else if (state.fxStatus === "loading") {
           addStatusRow("Loading exchange rate\u2026", "sf-fx-reference");
-          addStatusRow(`Values remain in ${state.baseCurrency}.`, "sf-fx-caution");
+          addStatusRow("Showing organization-currency values while loading.");
         } else if (state.fxStatus === "ready") {
           const rate = new Intl.NumberFormat(APP_CONFIG.portfolio.locale, { maximumSignificantDigits: 7 }).format(state.rate);
           const date = new Intl.DateTimeFormat(APP_CONFIG.portfolio.locale, { dateStyle: "medium", timeZone: "UTC" }).format(new Date(`${state.rateDate}T00:00:00Z`));
@@ -561,12 +580,9 @@ const SteerfoldApp = {
           addStatusRow(`Reference rate: ${state.provider} \u00b7 ${date}`, "sf-fx-reference");
           addStatusRow(`Retrieved: ${fetchedDate} \u00b7 ${fetchedTime}`);
           addStatusRow("Reference rate for display purposes.");
-          addStatusRow(`Stored portfolio and governance values remain in ${state.baseCurrency}.`, "sf-fx-caution");
         } else {
           addStatusRow(`Selected display currency: ${state.displayCurrency}`, "sf-fx-reference");
-          addStatusRow("Conversion is unavailable.");
-          addStatusRow(state.fxError || "A valid reference rate could not be loaded.");
-          addStatusRow(`Values remain in ${state.baseCurrency}.`, "sf-fx-caution");
+          addStatusRow("Conversion is currently unavailable. Showing organization-currency values.");
         }
         if (!state.persistenceAvailable) addStatusRow("This browser could not save your preference.", "sf-fx-caution");
       }
@@ -586,7 +602,6 @@ const SteerfoldApp = {
         values.append(source, arrow, converted);
         this.currencyPreview.replaceChildren(label, values);
       }
-      this.renderCurrencyIndicator();
     };
     this.displayCurrencySelect?.addEventListener("change", () => setDisplayCurrency(this.displayCurrencySelect.value));
     subscribeCurrencyChanges(update);
@@ -608,6 +623,11 @@ const SteerfoldApp = {
   },
 
   refreshMonetaryPresentation() {
+    const budgetFilter = this.explorerFilterControls?.get("budget");
+    if (budgetFilter) {
+      budgetFilter.labels[0].querySelector("span").textContent = `Budget (${APP_CONFIG.portfolio.currencyCode})`;
+      budgetFilter.setAttribute("aria-label", `Budget (${APP_CONFIG.portfolio.currencyCode})`);
+    }
     const projects = this.state.projects;
     if (!projects.length) return;
     this.renderFinancialPerformance(projects);
@@ -668,11 +688,11 @@ const SteerfoldApp = {
 
   setPortfolioContextVisibility(isVisible) {
     if (this.organizationContext) {
-      this.organizationContext.hidden = !isVisible;
+      this.organizationContext.hidden = !isVisible || !getActiveWorkspace();
     }
 
     if (this.sampleDataNotice) {
-      this.sampleDataNotice.hidden = !isVisible;
+      this.sampleDataNotice.hidden = !isVisible || !getActiveWorkspace()?.isDemo;
     }
   },
 
@@ -1357,7 +1377,6 @@ const SteerfoldApp = {
       "auth:changed",
       () => {
         this.renderProjectsPageActions();
-        this.governanceWorkflow?.handleAuthChange();
 
         const route = getCurrentRoute();
 
@@ -1370,7 +1389,10 @@ const SteerfoldApp = {
 
   async loadDashboard({
     allowCsvFallback = true,
+    throwOnError = false,
   } = {}) {
+    const version = this.dashboardLoadVersion = (this.dashboardLoadVersion || 0) + 1;
+    const workspaceRevision = getWorkspaceRevision();
     const loader = this.createDelayedLoader();
 
     this.renderTableMessage("Loading portfolio data...");
@@ -1379,6 +1401,7 @@ const SteerfoldApp = {
       const projects = await loadPortfolioData({
         allowCsvFallback,
       });
+      if (version !== this.dashboardLoadVersion || workspaceRevision !== getWorkspaceRevision()) return;
       const dataSource = getLastPortfolioDataSource();
 
       this.state.projects = projects;
@@ -1434,6 +1457,7 @@ const SteerfoldApp = {
       this.applyFilters();
       this.renderRouteFromUrl();
     } catch (error) {
+      if (version !== this.dashboardLoadVersion || workspaceRevision !== getWorkspaceRevision()) return;
       console.error("Portfolio data load failed:", error);
 
       this.renderKpis([]);
@@ -1448,7 +1472,7 @@ const SteerfoldApp = {
         "error",
       );
 
-      if (!allowCsvFallback) {
+      if (!allowCsvFallback || throwOnError) {
         throw error;
       }
     } finally {
@@ -1781,6 +1805,13 @@ const SteerfoldApp = {
 
 renderRouteFromUrl() {
   const route = getCurrentRoute();
+  if (this.workspaceUI?.render(route.view, this.state.projects.length)) {
+    this.pageTitle.textContent = "Workspace";
+    this.pageSubtitle.textContent = "Your organization, portfolio and projects.";
+    this.setPortfolioContextVisibility(false);
+    this.updateHeaderActionsForView(route.view);
+    return;
+  }
 
   if (this.governanceView) {
     this.governanceView.hidden = route.view !== "governance";
@@ -1834,16 +1865,21 @@ renderRouteFromUrl() {
     return;
   }
 
+  if (route.view === "account") {
+    this.showSettingsView("Account");
+    return;
+  }
+
   this.showPortfolioView({
     activeArea: "Portfolio",
   });
 },
 
-showSettingsView() {
+showSettingsView(area = "Settings") {
   this.setDefaultPageHeaderContext();
   this.state.currentProjectId = null;
-  this.pageTitle.textContent = "Settings";
-  this.pageSubtitle.textContent = "Application preferences.";
+  this.pageTitle.textContent = area;
+  this.pageSubtitle.textContent = area === "Account" ? "Your personal profile and account security." : "Organization settings and application preferences.";
   this.setPortfolioContextVisibility(false);
   [
     ...this.portfolioOverviewViews,
@@ -1855,7 +1891,7 @@ showSettingsView() {
     this.governanceView,
     this.stakeholderView,
   ].forEach((view) => { if (view) view.hidden = true; });
-  this.setNavigationArea("Settings");
+  this.setNavigationArea(area);
   this.renderProjectsPageActions();
   this.mainArea.scrollTop = 0;
 },
@@ -2688,7 +2724,7 @@ renderProjectsPageActions() {
   if (
     !header ||
     this.projectsSection.hidden ||
-    !isAuthenticated()
+    !isAuthenticated() || !canWriteWorkspace()
   ) {
     return;
   }
@@ -2729,11 +2765,13 @@ renderProjectsPageActions() {
 },
 
 openNewProjectForm() {
+  const workspace = requireWritableWorkspace();
   let createdProject = null;
 
   openProjectForm({
     mode: "create",
     onSubmit: async (projectData) => {
+      assertWorkspaceCurrent(workspace);
       if (!createdProject) {
         createdProject =
           await createProject(projectData);
@@ -2757,12 +2795,14 @@ openNewProjectForm() {
 },
 
 openEditProjectForm(project) {
+  const workspace = requireWritableWorkspace();
   let hasUpdatedProject = false;
 
   openProjectForm({
     mode: "edit",
     project,
     onSubmit: async (projectData) => {
+      assertWorkspaceCurrent(workspace);
       if (!hasUpdatedProject) {
         await updateProject(
           project.projectId,
@@ -2786,6 +2826,7 @@ openEditProjectForm(project) {
 },
 
 openDeleteProjectConfirmation(project) {
+  const workspace = requireWritableWorkspace();
   let hasDeletedProject = false;
 
   openConfirmDialog({
@@ -2795,6 +2836,7 @@ openDeleteProjectConfirmation(project) {
     cancelText: "Cancel",
     danger: true,
     onConfirm: async () => {
+      assertWorkspaceCurrent(workspace);
       if (!hasDeletedProject) {
         await deleteProject(project.projectId);
         hasDeletedProject = true;
@@ -3003,12 +3045,12 @@ renderProjectDetail(project) {
       onBackToProjects: () => {
         this.navigateToProjects();
       },
-      onEditProject: isAuthenticated()
+      onEditProject: isAuthenticated() && canWriteWorkspace()
         ? () => {
             this.openEditProjectForm(project);
           }
         : undefined,
-      onDeleteProject: isAuthenticated()
+      onDeleteProject: isAuthenticated() && canWriteWorkspace()
         ? () => {
             this.openDeleteProjectConfirmation(project);
           }
@@ -3108,6 +3150,16 @@ renderProjectDetail(project) {
 
   updateHeaderActionsForView(view) {
     this.activeHeaderView = view;
+    if (this.workspaceUI?.render(view, this.state.projects.length)) {
+      suspendWorkspaceRoute();
+      this.navLinks?.forEach((link) => {
+        link.classList.toggle("sf-nav-link--active", false);
+        link.removeAttribute("aria-current");
+      });
+      this.pageTitle.textContent = "Workspace";
+      this.pageSubtitle.textContent = "Create or choose your organization workspace.";
+      view = "settings";
+    }
     const sharedViews = ["portfolio", "budget", "forecasting", "decision-support", "governance", "stakeholder-view"];
     if (this.exportControl) this.exportControl.hidden = !sharedViews.includes(view) && view !== "project";
     if (this.helpButton) this.helpButton.hidden = false;
@@ -3124,9 +3176,16 @@ renderProjectDetail(project) {
       Governance: "governance",
       "Stakeholder View": "stakeholder-view",
       Settings: "settings",
+      Account: "account",
     };
     this.updateHeaderActionsForView(this.state.currentProjectId ? "project" : views[areaName]);
+    if (document.documentElement.dataset.workspaceBlocked === "true") areaName = "Workspace";
     if (this.settingsView) this.settingsView.hidden = areaName !== "Settings";
+    if (this.accountView) this.accountView.hidden = areaName !== "Account";
+    const accountLauncher = document.querySelector("[data-auth-launcher]");
+    accountLauncher?.classList.toggle("sf-nav-link--active", areaName === "Account");
+    if (areaName === "Account") accountLauncher?.setAttribute("aria-current", "page");
+    else accountLauncher?.removeAttribute("aria-current");
     this.navLinks.forEach((link) => {
       const isActive =
         link.textContent.trim() ===
@@ -3232,6 +3291,7 @@ renderProjectDetail(project) {
       isCollapsed
         ? "Expand sidebar"
         : "Collapse sidebar";
+    this.workspaceUI?.syncSidebar();
   },
 
   isSmallScreen() {

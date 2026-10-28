@@ -368,7 +368,9 @@ export function renderScenarioAnalysis(
   impact.setAttribute("aria-live", "polite");
 
   function renderResults() {
+    note.textContent = `Scenario inputs use ${APP_CONFIG.portfolio.currencyCode}. Values are temporary and do not modify project records.`;
     FIELDS.forEach((field) => {
+      inputElements.get(field.key).input.labels[0].textContent = `Scenario ${field.label} (${APP_CONFIG.portfolio.currencyCode})`;
       inputElements.get(field.key).current.textContent = formatMetric(selectedProject[field.key], "currency");
     });
     const current = getMetrics(selectedProject);

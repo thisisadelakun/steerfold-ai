@@ -1,3 +1,5 @@
+import { validateOrganizationCurrency } from "./organization-currency.js";
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const HASH = /^[0-9a-f]{64}$/;
 const validText = (value) => typeof value === "string" && value.trim().length > 0 && value.length <= 1000;
@@ -15,12 +17,13 @@ export function normalizeProjectImportResult(value, {
     || !UUID.test(value.import_id) || !UUID.test(value.imported_by) || !HASH.test(value.payload_hash)
     || (payloadHash && value.payload_hash !== payloadHash) || (actorId && value.imported_by !== actorId)
     || typeof value.committed_at !== "string" || !/^\d{4}-\d{2}-\d{2}T/.test(value.committed_at)
-    || !Number.isFinite(Date.parse(value.committed_at)) || value.currency_code !== "CAD"
+    || !Number.isFinite(Date.parse(value.committed_at))
     || !(value.source_namespace === null || validText(value.source_namespace))
     || !Number.isSafeInteger(value.rows_submitted) || value.rows_submitted < 1 || value.rows_submitted > 5000
     || value.rows_imported !== value.rows_submitted || value.rows_skipped !== 0 || value.rows_failed !== 0
     || !Array.isArray(value.rows) || value.rows.length !== value.rows_imported) invalid();
-  if (payload && (value.rows_submitted !== payload.rows.length
+  try { validateOrganizationCurrency(value.currency_code); } catch { invalid(); }
+  if (payload && (value.currency_code !== payload.currency_code || value.rows_submitted !== payload.rows.length
     || value.source_namespace !== (payload.source_namespace?.trim().toLowerCase() || null))) invalid();
   const incoming = payload && new Map(payload.rows.map((row) => [row.source_row, row]));
   const sourceRows = new Set();
@@ -41,7 +44,7 @@ export function normalizeProjectImportResult(value, {
   return {
     contract_version: 1, status: "committed", replayed: value.replayed, import_id: value.import_id,
     idempotency_key: value.idempotency_key, payload_hash: value.payload_hash, imported_by: value.imported_by,
-    committed_at: value.committed_at, source_namespace: value.source_namespace, currency_code: "CAD",
+    committed_at: value.committed_at, source_namespace: value.source_namespace, currency_code: value.currency_code,
     rows_submitted: value.rows_submitted, rows_imported: value.rows_imported, rows_skipped: 0, rows_failed: 0, rows,
   };
 }

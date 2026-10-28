@@ -18,7 +18,23 @@ function row(index) {
   };
 }
 
-async function fixture({ count = 10, pageResponse, csvFails = false, useSupabase = true } = {}) {
+async function fixture({ count = 10, pageResponse, csvFails = false, useSupabase = true,
+  workspace = { id: "demo-id", isDemo: true, canWrite: false }, token = null, onToken, onFetch, transport } = {}) {
+  let currentWorkspace = workspace;
+  const workspaceContext = {
+    getActiveWorkspace: () => currentWorkspace,
+    workspaceHeaders: () => {
+      if (!currentWorkspace) throw new Error("Select an active workspace first.");
+      return { "x-steerfold-organization-id": currentWorkspace.id };
+    },
+    requireWritableWorkspace: () => {
+      if (!currentWorkspace || currentWorkspace.isDemo || !currentWorkspace.canWrite) throw new Error("Workspace is not writable.");
+      return currentWorkspace;
+    },
+    assertWorkspaceCurrent: (captured) => {
+      if (!captured || captured !== currentWorkspace) throw new Error("Active workspace changed.");
+    },
+  };
   const requests = [];
   let active = 0;
   let maximumActive = 0;
@@ -28,16 +44,20 @@ async function fixture({ count = 10, pageResponse, csvFails = false, useSupabase
     console: { warn() {} },
     fetch: async (url, options = {}) => {
       requests.push({ url, options });
+      onFetch?.(() => { currentWorkspace = { id: "other-id", canWrite: true, isDemo: false }; });
       if (url === "data/Steerfold_AI_Project_Data.csv") {
         return { ok: !csvFails, status: csvFails ? 500 : 200, text: async () => csv };
       }
       assert.equal(new URL(url).origin, "https://fixture.invalid");
       assert.equal(new URL(url).pathname, "/rest/v1/projects");
+      assert.equal(new URL(url).searchParams.get("organization_id"), `eq.${workspace.id}`);
+      assert.equal(options.headers["x-steerfold-organization-id"], workspace.id);
+      assert.equal(options.headers.Authorization, token ? `Bearer ${token}` : undefined);
+      if (transport) return transport(url, options);
       assert.equal(new URL(url).searchParams.get("select"), "*");
       assert.equal(new URL(url).searchParams.get("order"), "project_id.asc");
       assert.equal(options.method ?? "GET", "GET");
       assert.equal(options.headers.apikey, "fixture-publishable-key");
-      assert.equal(options.headers.Authorization, undefined);
       assert.equal(options.headers.Prefer, undefined);
       assert.equal(options.headers["Range-Unit"], "items");
       const [start, end] = options.headers.Range.split("-").map(Number);
@@ -64,9 +84,18 @@ async function fixture({ count = 10, pageResponse, csvFails = false, useSupabase
         this.setExport("SUPABASE_PUBLISHABLE_KEY", "fixture-publishable-key");
       }, { context });
     }
+    if (specifier === "./workspace-context.js") {
+      return new vm.SyntheticModule(Object.keys(workspaceContext), function () {
+        for (const [key, value] of Object.entries(workspaceContext)) this.setExport(key, value);
+      }, { context });
+    }
     assert.equal(specifier, "./auth-service.js");
     return new vm.SyntheticModule(["getValidAccessToken"], function () {
-      this.setExport("getValidAccessToken", async () => { authCalls += 1; throw new Error("Public reads must not request a token"); });
+      this.setExport("getValidAccessToken", async () => {
+        authCalls += 1;
+        onToken?.(() => { currentWorkspace = { id: "other-id", canWrite: true, isDemo: false }; });
+        return token;
+      });
     }, { context });
   });
   await module.evaluate();
@@ -90,7 +119,7 @@ for (const count of [0, 10, 1000, 1001, 2500, 5000]) {
     assert.equal(new Set(projects.map((project) => project.projectId)).size, count);
     assert.deepEqual(Array.from(projects, (project) => project.projectId), Array.from({ length: count }, (_, index) => row(index).project_id));
     assert.equal(f.maximumActive(), 1);
-    assert.equal(f.authCalls(), 0);
+    assert.equal(f.authCalls(), 1);
     assert.equal(f.api.getLastPortfolioDataSource(), "supabase");
     if (count) {
       assert.equal(projects[0].budgetBAC, 120000.5);
@@ -182,3 +211,150 @@ test("CSV-only provider behavior is preserved", async () => {
   assert.equal(f.liveRequests().length, 0);
   assert.equal(f.api.getLastPortfolioDataSource(), "csv");
 });
+
+test("signed-in reads use the bearer token and new workspaces stay empty", async () => {
+  const f = await fixture({ count: 0, workspace: { id: "new-id", canWrite: true, isDemo: false }, token: "signed-in" });
+  assert.equal((await f.api.loadPortfolioData()).length, 0);
+  assert.equal(f.requests.length, 1);
+  assert.equal(f.api.getLastPortfolioDataSource(), "supabase");
+});
+
+test("non-demo and unresolved workspaces never load CSV, including CSV-only mode", async () => {
+  for (const workspace of [null, { id: "new-id", canWrite: true, isDemo: false }]) {
+    for (const useSupabase of [true, false]) {
+      const f = await fixture({ workspace, useSupabase, pageResponse: () => ({ ok: false, status: 503 }) });
+      await assert.rejects(f.api.loadPortfolioData());
+      await assert.rejects(f.api.getProject("P000001"));
+      assert.ok(f.requests.every(({ url }) => url !== "data/Steerfold_AI_Project_Data.csv"));
+    }
+  }
+});
+
+test("project reads reject workspace changes during token and fetch awaits without CSV fallback", async () => {
+  for (const hook of ["onToken", "onFetch"]) {
+    for (const method of ["loadPortfolioData", "getProject"]) {
+      const f = await fixture({ [hook]: (switchWorkspace) => switchWorkspace(),
+        transport: () => ({ ok: true, json: async () => [row(0)] }) });
+      await assert.rejects(f.api[method]("P000001"), /workspace changed/);
+      assert.equal(f.requests.length, hook === "onToken" ? 0 : 1);
+    }
+  }
+});
+
+test("project detail and writes scope URLs; only create includes organization in its body", async () => {
+  const f = await fixture({ workspace: { id: "write-id", canWrite: true, isDemo: false }, token: "signed-in",
+    transport: () => ({ ok: true, json: async () => [row(0)] }) });
+  await f.api.getProject("P000001");
+  await f.api.createProject({ projectName: "Created", organization_id: "untrusted" });
+  await f.api.updateProject("P000001", { projectName: "Updated", organization_id: "untrusted" });
+  await f.api.deleteProject("P000001");
+  assert.deepEqual(f.requests.map(({ options }) => options.method ?? "GET"), ["GET", "POST", "PATCH", "DELETE"]);
+  assert.equal(JSON.parse(f.requests[1].options.body).organization_id, "write-id");
+  assert.equal("organization_id" in JSON.parse(f.requests[2].options.body), false);
+  for (const { url } of [f.requests[0], f.requests[2], f.requests[3]]) {
+    assert.equal(new URL(url).searchParams.get("project_id"), "eq.P000001");
+  }
+});
+
+test("project writes block demo, read-only, unresolved and switched workspaces", async () => {
+  for (const method of ["createProject", "updateProject", "deleteProject"]) {
+    for (const workspace of [null, { id: "demo", isDemo: true, canWrite: false }, { id: "read", isDemo: false, canWrite: false }]) {
+      const f = await fixture({ workspace });
+      await assert.rejects(f.api[method]("P000001", {}), /not writable/);
+      assert.equal(f.requests.length, 0);
+      assert.equal(f.authCalls(), 0);
+    }
+    for (const hook of ["onToken", "onFetch"]) {
+      const f = await fixture({ workspace: { id: "write-id", isDemo: false, canWrite: true }, token: "signed-in",
+        [hook]: (switchWorkspace) => switchWorkspace(), transport: () => ({ ok: true, json: async () => [row(0)] }) });
+      await assert.rejects(f.api[method]("P000001", {}), /workspace changed/);
+      assert.equal(f.requests.length, hook === "onToken" ? 0 : 1);
+    }
+  }
+});
+
+const governanceUser = "11111111-1111-4111-8111-111111111111";
+const scopedServices = [
+  { file: "change-request-service.js", reads: [["listChangeRequests"], ["getChangeRequest", "cr-id"], ["listChangeRequestEvents", "cr-id"]],
+    writes: [["createChangeRequest", { projectCode: "P001" }], ["updateDraftChangeRequest", "cr-id", {}],
+      ["transitionChangeRequestStatus", "cr-id", "Submitted"], ["applyApprovedChangeRequest", "cr-id"], ["deleteDraftChangeRequest", "cr-id"]] },
+  { file: "governance-role-service.js", reads: [["getMyGovernanceRoles"], ["listGovernanceRoleAssignments"], ["listGovernanceUsers"]],
+    writes: [["assignGovernanceRole", governanceUser, "requester"], ["revokeGovernanceRole", governanceUser, "requester"]] },
+];
+
+async function scopedServiceFixture(file, { workspace = { id: "scope-id", canWrite: true, isDemo: false }, hook } = {}) {
+  let currentWorkspace = workspace;
+  const requests = [];
+  const switchWorkspace = () => { currentWorkspace = { id: "other-id", canWrite: true, isDemo: false }; };
+  const context = vm.createContext({ URL, fetch: async (url, options) => {
+    requests.push({ url, options });
+    if (hook === "fetch") switchWorkspace();
+    return { ok: true, status: 200, json: async () => {
+      if (hook === "json") switchWorkspace();
+      if (/delete_draft|revoke_governance/.test(url)) return true;
+      if (/assign_governance_role$/.test(url)) return { user_id: governanceUser, role: "requester" };
+      return [];
+    } };
+  } });
+  const module = new vm.SourceTextModule(await readFile(new URL(`../app/js/${file}`, import.meta.url), "utf8"), { context });
+  await module.link((name) => {
+    const dependency = name === "./supabase-config.js"
+      ? { SUPABASE_URL: "https://fixture.invalid", SUPABASE_PUBLISHABLE_KEY: "fixture-key" }
+      : name === "./auth-service.js" ? { getValidAccessToken: async () => {
+        if (hook === "token") switchWorkspace();
+        return "signed-in";
+      } } : {
+        getActiveWorkspace: () => currentWorkspace,
+        workspaceHeaders: () => {
+          if (!currentWorkspace) throw new Error("Select an active workspace first.");
+          return { "x-steerfold-organization-id": currentWorkspace.id };
+        },
+        requireWritableWorkspace: () => {
+          if (!currentWorkspace || currentWorkspace.isDemo || !currentWorkspace.canWrite) throw new Error("Workspace is not writable.");
+          return currentWorkspace;
+        },
+        assertWorkspaceCurrent: (captured) => {
+          if (!captured || captured !== currentWorkspace) throw new Error("Active workspace changed.");
+        },
+      };
+    return new vm.SyntheticModule(Object.keys(dependency), function () {
+      for (const [key, value] of Object.entries(dependency)) this.setExport(key, value);
+    }, { context });
+  });
+  await module.evaluate();
+  return { api: module.namespace, requests };
+}
+
+for (const { file, reads, writes } of scopedServices) {
+  test(`${file}: every read and mutation sends workspace and authentication headers`, async () => {
+    const f = await scopedServiceFixture(file);
+    for (const [method, ...args] of [...reads, ...writes]) await f.api[method](...args);
+    assert.equal(f.requests.length, reads.length + writes.length);
+    for (const { options } of f.requests) {
+      assert.equal(options.headers["x-steerfold-organization-id"], "scope-id");
+      assert.equal(options.headers.Authorization, "Bearer signed-in");
+    }
+  });
+
+  test(`${file}: mutations are blocked in demo/read-only/unresolved workspaces; reads remain allowed`, async () => {
+    for (const workspace of [null, { id: "demo", isDemo: true, canWrite: false }, { id: "read", isDemo: false, canWrite: false }]) {
+      const f = await scopedServiceFixture(file, { workspace });
+      for (const [method, ...args] of writes) await assert.rejects(f.api[method](...args), /not writable/);
+      assert.equal(f.requests.length, 0);
+      for (const [method, ...args] of reads) {
+        if (workspace) await f.api[method](...args);
+        else await assert.rejects(f.api[method](...args), /active workspace/);
+      }
+    }
+  });
+
+  test(`${file}: reads and writes reject workspace switches across each await`, async () => {
+    for (const hook of ["token", "fetch", "json"]) {
+      for (const [method, ...args] of [...reads, ...writes]) {
+        const f = await scopedServiceFixture(file, { hook });
+        await assert.rejects(f.api[method](...args), /workspace changed/);
+        assert.equal(f.requests.length, hook === "token" ? 0 : 1);
+      }
+    }
+  });
+}

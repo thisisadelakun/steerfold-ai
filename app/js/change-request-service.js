@@ -4,6 +4,7 @@ import {
 } from "./supabase-config.js";
 
 import { getValidAccessToken } from "./auth-service.js";
+import { getActiveWorkspace, workspaceHeaders, requireWritableWorkspace, assertWorkspaceCurrent } from "./workspace-context.js";
 
 function nullableNumber(value) {
   return value === null || value === undefined
@@ -159,8 +160,9 @@ async function getErrorMessage(response, fallbackMessage) {
   return fallbackMessage;
 }
 
-async function getAuthenticatedHeaders() {
+async function getAuthenticatedHeaders(workspace) {
   const accessToken = await getValidAccessToken();
+  assertWorkspaceCurrent(workspace);
 
   if (!accessToken) {
     throw new Error(
@@ -169,6 +171,7 @@ async function getAuthenticatedHeaders() {
   }
 
   return {
+    ...workspaceHeaders(),
     apikey: SUPABASE_PUBLISHABLE_KEY,
     Authorization: `Bearer ${accessToken}`,
     "Content-Type": "application/json",
@@ -176,8 +179,10 @@ async function getAuthenticatedHeaders() {
 }
 
 async function callRpc(functionName, body, fallbackMessage) {
+  const workspace = requireWritableWorkspace();
   const url = new URL(`/rest/v1/rpc/${functionName}`, SUPABASE_URL);
-  const headers = await getAuthenticatedHeaders();
+  const headers = await getAuthenticatedHeaders(workspace);
+  assertWorkspaceCurrent(workspace);
   let response;
 
   try {
@@ -189,13 +194,16 @@ async function callRpc(functionName, body, fallbackMessage) {
   } catch {
     throw new Error(`${fallbackMessage} Check your network connection.`);
   }
+  assertWorkspaceCurrent(workspace);
 
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, fallbackMessage));
   }
 
   if (response.status === 204) return null;
-  return response.json();
+  const result = await response.json();
+  assertWorkspaceCurrent(workspace);
+  return result;
 }
 
 function getReturnedRecord(payload) {
@@ -203,7 +211,10 @@ function getReturnedRecord(payload) {
 }
 
 async function readRows(url, fallbackMessage) {
-  const headers = await getAuthenticatedHeaders();
+  const workspace = getActiveWorkspace();
+  if (!workspace) throw new Error("Select an active workspace first.");
+  const headers = await getAuthenticatedHeaders(workspace);
+  assertWorkspaceCurrent(workspace);
   let response;
 
   try {
@@ -213,12 +224,14 @@ async function readRows(url, fallbackMessage) {
   } catch {
     throw new Error(`${fallbackMessage} Check your network connection.`);
   }
+  assertWorkspaceCurrent(workspace);
 
   if (!response.ok) {
     throw new Error(await getErrorMessage(response, fallbackMessage));
   }
 
   const rows = await response.json();
+  assertWorkspaceCurrent(workspace);
   return Array.isArray(rows) ? rows : [];
 }
 

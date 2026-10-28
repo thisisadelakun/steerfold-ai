@@ -140,23 +140,43 @@
           </div>
 
           <div class="sf-account-area" aria-label="User controls">
-            <div
-              class="sf-currency-indicator"
-              data-currency-indicator
-              aria-label="Display currency preference"
-            >
-              <span class="sf-currency-label">Currency ·</span>
-              &mdash;
-            </div>
-
           </div>
         </header>
 
         <main class="sf-main-content">
           <section data-settings-view aria-label="Settings" hidden>
-            <p>Personalize how Steerfold looks and displays portfolio information.</p>
-            <fieldset class="sf-theme-preferences">
+            <p class="sf-settings-intro">Manage your organization, appearance and display preferences.</p>
+            <section class="sf-profile-section" aria-labelledby="sf-company-title">
+              <div class="sf-settings-section-heading"><h2 id="sf-company-title">Organization Profile</h2><p>Company details identify the organization behind this portfolio. They are separate from your personal account.</p></div>
+              <form data-company-profile class="sf-settings-profile-form">
+                <div class="sf-settings-fields">
+                  <div><label for="sf-company-name">Organization Name</label><input id="sf-company-name" name="organizationName" maxlength="120" required disabled aria-describedby="sf-company-name-help"><small id="sf-company-name-help">The company name shown across your portfolio.</small></div>
+                  <div><label for="sf-company-industry">Industry</label><input id="sf-company-industry" name="industry" maxlength="120" disabled placeholder="e.g. Professional services" aria-describedby="sf-company-industry-help"><small id="sf-company-industry-help">Your organization's primary business sector. Optional.</small></div>
+                </div>
+                <div class="sf-settings-actions"><button class="sf-utility-primary" type="submit" disabled>Save Organization Profile</button><button class="sf-utility-secondary" type="button" data-profile-reload>Reload</button></div>
+                <p role="status" data-profile-status>Loading organization profile...</p>
+              </form>
+            </section>
+            <fieldset class="sf-currency-preferences" data-settings-financial>
+              <legend>Financial Settings</legend>
+              <div class="sf-currency-base"><span>Current organization currency</span><strong data-organization-currency>&mdash;</strong></div>
+              <label for="sf-organization-currency">Organization Currency</label>
+              <select id="sf-organization-currency" aria-describedby="sf-organization-currency-explanation sf-organization-currency-status" data-organization-currency-select disabled>
+                <option value="USD">USD &mdash; US Dollar</option>
+                <option value="CAD">CAD &mdash; Canadian Dollar</option>
+                <option value="GBP">GBP &mdash; British Pound</option>
+                <option value="EUR">EUR &mdash; Euro</option>
+              </select>
+              <p id="sf-organization-currency-explanation">Project budgets, EVM calculations, forecasts and governance records use your organization's currency.</p>
+              <div class="sf-settings-actions">
+                <button type="button" class="sf-utility-primary" data-organization-currency-save disabled>Save Organization Currency</button>
+                <button type="button" class="sf-utility-secondary" data-organization-currency-reload>Reload Settings</button>
+              </div>
+              <p id="sf-organization-currency-status" role="status" data-organization-currency-status>Loading organization currency...</p>
+            </fieldset>
+            <fieldset class="sf-theme-preferences" data-settings-appearance>
               <legend>Appearance</legend>
+              <p>Choose how Steerfold looks on this device.</p>
               <div class="sf-theme-choices">
                 <label><input type="radio" name="sf-theme" value="dark"><span>Dark</span></label>
                 <label><input type="radio" name="sf-theme" value="light"><span>Light</span></label>
@@ -164,14 +184,12 @@
               </div>
               <p class="sf-theme-feedback" role="status" data-theme-feedback></p>
             </fieldset>
-            <fieldset class="sf-currency-preferences">
-              <legend>Currency</legend>
-              <div class="sf-currency-base"><span>Organization Currency</span><strong data-organization-currency>&mdash;</strong></div>
-              <p>Project budgets, EVM calculations and governance records use your organization's currency.</p>
+            <fieldset class="sf-currency-preferences" data-settings-display>
+              <legend>Display Preferences</legend>
               <label for="sf-display-currency">Display Currency</label>
               <select id="sf-display-currency" aria-describedby="sf-currency-explanation sf-currency-status" data-display-currency>
-                <option value="CAD">CAD &mdash; Canadian Dollar</option>
                 <option value="USD">USD &mdash; US Dollar</option>
+                <option value="CAD">CAD &mdash; Canadian Dollar</option>
                 <option value="GBP">GBP &mdash; British Pound</option>
                 <option value="EUR">EUR &mdash; Euro</option>
               </select>
@@ -179,6 +197,37 @@
               <div id="sf-currency-status" class="sf-fx-status" role="status" data-currency-status><p>Financial values use the organization's currency.</p></div>
               <div class="sf-currency-preview" data-currency-preview></div>
             </fieldset>
+          </section>
+          <section data-account-view aria-label="Account" hidden>
+            <div data-account-guest><p>Sign in to manage your personal profile and account security.</p><button type="button" class="sf-utility-primary" data-account-sign-in>Sign In</button><p role="status" data-account-session-status></p></div>
+            <div data-account-content hidden>
+              <section class="sf-profile-section" aria-labelledby="sf-person-title">
+                <div class="sf-settings-section-heading"><h2 id="sf-person-title">Your Profile</h2><p>Your personal details belong to your account, not the organization. They do not grant governance permissions.</p></div>
+                <div class="sf-settings-identity"><span class="sf-account-avatar" data-profile-avatar aria-hidden="true">?</span><strong data-profile-identity>Your account</strong></div>
+                <form data-personal-profile class="sf-settings-profile-form">
+                  <div class="sf-settings-fields">
+                    <div><label for="sf-profile-name">Full Name</label><input id="sf-profile-name" name="fullName" autocomplete="name" maxlength="120" required disabled aria-describedby="sf-profile-name-help"><small id="sf-profile-name-help">Your saved name is used for your avatar initials.</small></div>
+                    <div><label for="sf-profile-job">Job Title</label><input id="sf-profile-job" name="jobTitle" autocomplete="organization-title" maxlength="120" disabled aria-describedby="sf-profile-job-help"><small id="sf-profile-job-help">Your professional title. Optional; it does not assign a role.</small></div>
+                    <div><label for="sf-profile-email">Email Address</label><input id="sf-profile-email" type="email" autocomplete="email" readonly data-profile-email aria-describedby="sf-profile-email-help"><small id="sf-profile-email-help">Managed through authentication. Email cannot be changed here.</small></div>
+                  </div>
+                  <div class="sf-settings-actions"><button class="sf-utility-primary" type="submit" disabled>Save Your Profile</button><button class="sf-utility-secondary" type="button" data-profile-reload>Reload</button></div>
+                  <p role="status" data-profile-status>Loading your profile...</p>
+                </form>
+              </section>
+              <section class="sf-profile-section" aria-labelledby="sf-account-security-title">
+                <div class="sf-settings-section-heading"><h2 id="sf-account-security-title">Account Security</h2><p>Change your password securely through Supabase. If verification is required, request a code sent to your account email or phone.</p></div>
+                <form class="sf-settings-profile-form" data-account-password>
+                  <div class="sf-settings-fields">
+                    <div><label for="sf-new-password">New Password</label><input id="sf-new-password" name="password" type="password" autocomplete="new-password" minlength="8" required><small>Use at least 8 characters. Additional provider requirements may apply.</small></div>
+                    <div><label for="sf-confirm-password">Confirm New Password</label><input id="sf-confirm-password" name="confirmation" type="password" autocomplete="new-password" minlength="8" required></div>
+                    <div><label for="sf-password-code">Verification Code</label><input id="sf-password-code" name="nonce" autocomplete="one-time-code" inputmode="numeric"><small>Only required when Supabase requests verification.</small></div>
+                  </div>
+                  <div class="sf-settings-actions"><button type="submit" class="sf-utility-primary">Update Password</button><button type="button" class="sf-utility-secondary" data-account-reauthenticate>Send Verification Code</button></div>
+                  <p role="status" data-account-security-status></p>
+                </form>
+              </section>
+              <section class="sf-profile-section" aria-label="Sign out"><div class="sf-settings-actions"><button type="button" class="sf-utility-secondary" data-account-sign-out>Sign Out</button></div><p role="status" data-account-sign-out-status></p></section>
+            </div>
           </section>
           <section class="sf-kpi-grid" aria-label="Portfolio key performance indicators" data-portfolio-overview data-portfolio-kpis>
             <article class="sf-kpi-card">

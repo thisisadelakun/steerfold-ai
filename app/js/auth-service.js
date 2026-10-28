@@ -5,6 +5,24 @@ import {
 
 const SESSION_STORAGE_KEY = "steerfold_auth_session";
 
+async function authenticationError(response, signingUp) {
+  let code;
+  try { const details = await response.json(); code = details?.code || details?.error_code; } catch { /* Never echo provider payloads. */ }
+  const messages = {
+    signup_disabled: "New account registration is currently disabled.",
+    invalid_credentials: "Email or password is incorrect.",
+    email_not_confirmed: "Confirm your email address before signing in.",
+    user_already_exists: "An account already exists for this email. Try signing in.",
+    email_exists: "An account already exists for this email. Try signing in.",
+    weak_password: "Choose a stronger password and try again.",
+    over_email_send_rate_limit: "Too many emails requested. Wait before trying again.",
+    over_request_rate_limit: "Too many requests. Wait before trying again.",
+  };
+  return new Error((Object.hasOwn(messages, code) ? messages[code] : null) || (response.status === 429 ? "Too many requests. Wait before trying again."
+    : signingUp ? "Sign up could not be completed. Check your details and try again."
+      : "Sign in could not be completed. Check your details and try again."));
+}
+
 function saveSession(session) {
   if (
     typeof session?.access_token !== "string" ||
@@ -83,26 +101,33 @@ export async function signIn(email, password) {
   });
 
   if (!response.ok) {
-    let serverMessage = `Sign in failed with status ${response.status}`;
-
-    try {
-      const errorData = await response.json();
-
-      if (errorData?.msg) {
-        serverMessage = errorData.msg;
-      } else if (errorData?.error_description) {
-        serverMessage = errorData.error_description;
-      }
-    } catch {
-      // Keep default message if JSON parsing fails
-    }
-
-    throw new Error(serverMessage);
+    throw await authenticationError(response, false);
   }
 
   const session = await response.json();
 
   return saveSession(session);
+}
+
+export async function signUp(email, password, fullName) {
+  if (typeof fullName !== "string" || !fullName.trim() || fullName.trim().length > 120) {
+    throw new Error("Enter your full name using at most 120 characters.");
+  }
+  if (typeof email !== "string" || !email.trim() || typeof password !== "string" || !password) {
+    throw new Error("Email and password are required.");
+  }
+  const response = await fetch(`${SUPABASE_URL}/auth/v1/signup`, {
+    method: "POST",
+    headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+    body: JSON.stringify({ email: email.trim(), password, data: { full_name: fullName.trim() } }),
+  });
+  if (!response.ok) throw await authenticationError(response, true);
+  const result = await response.json();
+  const user = result.user ?? result;
+  if (typeof user?.id !== "string" || !user.id) throw new Error("The signup response could not be verified.");
+  // Email verification may return a user without an authenticated session.
+  const session = result.access_token ? saveSession(result) : null;
+  return { user, session, needsEmailVerification: !session };
 }
 
 export function getStoredSession() {
